@@ -40,6 +40,7 @@ class GuardTests(unittest.TestCase):
     def setUp(self):
         self.c = json.loads((ROOT/'config/examples/controller.json').read_text())
         self.d = json.loads((ROOT/'config/examples/deployment.json').read_text())
+        self.c,self.d=guard.validate(self.c,self.d)
 
     def test_example_valid(self):
         guard.validate(self.c, self.d)
@@ -66,7 +67,7 @@ class GuardTests(unittest.TestCase):
             guard.validate(self.c, self.d)
 
     def test_reserved_rule_collision_rejected(self):
-        expected = guard.expected_policies(self.d)
+        expected = guard.expected_policies(*guard.validate(self.c,self.d))
         actual = copy.deepcopy(expected)
         actual[0]['table'] = '999'
         with self.assertRaises(guard.Conflict):
@@ -74,10 +75,10 @@ class GuardTests(unittest.TestCase):
 
     def test_foreign_priorities_preserved(self):
         guard.validate_policies([{'priority':100,'src':'all','table':'999'}],
-                                guard.expected_policies(self.d))
+                                guard.expected_policies(*guard.validate(self.c,self.d)))
 
     def test_duplicate_reserved_rule_rejected(self):
-        expected = guard.expected_policies(self.d)
+        expected = guard.expected_policies(*guard.validate(self.c,self.d))
         with self.assertRaises(guard.Conflict):
             guard.validate_policies([expected[0], expected[0]], expected)
 
