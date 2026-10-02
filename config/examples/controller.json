@@ -1,0 +1,34 @@
+{
+  "subnet": "10.60.0.0/24",
+  "targets": [
+    "10.60.0.10",
+    "10.60.0.60",
+    "10.60.0.1"
+  ],
+  "quorum": 2,
+  "interval": 2,
+  "failure_rounds": 8,
+  "recovery_rounds": 30,
+  "paths": [
+    {
+      "name": "wg-main",
+      "interface": "vpn-wg-b",
+      "source": "10.250.102.2"
+    },
+    {
+      "name": "wg-secondary",
+      "interface": "vpn-wg-a",
+      "source": "10.250.101.2"
+    },
+    {
+      "name": "ipsec-main",
+      "interface": "vpn-ipsec-b",
+      "source": "10.251.102.2"
+    },
+    {
+      "name": "ipsec-secondary",
+      "interface": "vpn-ipsec-a",
+      "source": "10.251.101.2"
+    }
+  ]
+}
