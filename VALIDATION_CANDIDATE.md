@@ -1,7 +1,8 @@
 # v0.2.0 candidate validation
 
-This branch adds reusable configuration and diagnostics. It is a development
-candidate, not the published v0.1.0 release and not a production upgrade.
+This candidate adds reusable configuration and diagnostics. It can be published
+as a prerelease for independent evaluation while longer observation continues.
+It is not a stable v0.2.0 release or an automatic production upgrade.
 
 ## Completed checks, 2026-10-02
 
@@ -37,13 +38,14 @@ from this repository.
 24-hour observation has been started separately for the Linux-only and mixed
 topologies. Its result is **pending**. A completed functional suite does not
 establish overnight stability or successful natural IPsec rekeys. The final
-candidate revision is being checked again before observation.
+executable candidate revision passed the functional suites before observation
+began. Documentation changes do not change that executable revision.
 
-GitHub Actions checks unit tests on Python 3.10, 3.12 and 3.13 and builds/tests
-the image. Workflow definition alone is not proof of a successful hosted run;
-inspect the branch checks before merging.
+GitHub Actions passed unit tests on Python 3.10, 3.12 and 3.13 and built/tested
+the image on the candidate branch and pull request. New revisions still require
+their own successful checks.
 
-Do not publish v0.2.0 as validated until the final revision's checks, hosted CI
+Do not label v0.2.0 stable or fully validated until the final revision's checks, hosted CI
 and observation results have been reviewed. Remove disposable test resources
 and confirm the existing test-host application/router configuration remain intact.
 
