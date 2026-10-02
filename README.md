@@ -9,6 +9,9 @@ been installed on the production VPS. Validate your own gateways, host firewall
 and provider paths before deployment. This repository has no production
 deployment action.
 
+See [v0.1.0 validation](VALIDATION.md) for the isolated four-path test results
+and their limits.
+
 ## How it works
 
 The preferred order is **WireGuard main → WireGuard secondary → IPsec main →
