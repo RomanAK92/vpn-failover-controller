@@ -1,0 +1,17 @@
+config/local/
+*.key
+*.pem
+*.p12
+*.pfx
+.env
+.env.*
+!*.example
+__pycache__/
+*.pyc
+state/
+logs/
+*.log
+*.tar
+*.tar.gz
+*.zip
+monitoring/kuma.json
