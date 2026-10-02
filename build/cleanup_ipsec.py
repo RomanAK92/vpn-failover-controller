@@ -2,7 +2,8 @@
 import guard,json,re,ipaddress
 c,d=guard.validate_files();meta=json.loads((guard.P/'peers.json').read_text())
 local={a['local'] for row in json.loads(guard.run(['ip','-j','addr','show'])) for a in row.get('addr_info',[]) if a.get('family')=='inet'}
-expected={101:meta['a']['endpoint'],102:meta['b']['endpoint']};deletes=[]
+owned={p['if_id']:p for p in c['paths'] if p['kind']=='ipsec'}
+expected={ident:meta[p['peer']]['endpoint'] for ident,p in owned.items()};deletes=[]
 for kind in ('state','policy'):
  # iproute2 on this host does not provide JSON for XFRM. Never log raw state: it contains keys.
  text=guard.run(['ip','-s','xfrm',kind])
@@ -19,7 +20,7 @@ for kind in ('state','policy'):
    if not spi:raise guard.Conflict('Unexpected protocol in reserved XFRM identity')
    deletes.append(['ip','xfrm','state','delete','src',src,'dst',dst,'proto','esp','spi',spi.group(1)])
   else:
-   tunnel='10.251.'+str(ident)+'.2/32'
+   tunnel=owned[ident]['source']+'/32'
    if (src,dst) not in [(tunnel,c['subnet']),(c['subnet'],tunnel)]:raise guard.Conflict('Foreign selector occupies reserved XFRM identity')
    direction=re.search(r'\bdir (in|out|fwd)\b',block);index=re.search(r'\bindex (\d+)',block)
    if not direction or not index:raise guard.Conflict('Unrecognized owned XFRM policy')
