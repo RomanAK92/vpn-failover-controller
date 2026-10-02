@@ -1,0 +1,12 @@
+{
+  "a": {
+    "endpoint": "203.0.113.20",
+    "port": 51889,
+    "public_key": "REPLACE_WITH_SECONDARY_ROUTER_PUBLIC_KEY"
+  },
+  "b": {
+    "endpoint": "203.0.113.10",
+    "port": 51889,
+    "public_key": "REPLACE_WITH_MAIN_ROUTER_PUBLIC_KEY"
+  }
+}
