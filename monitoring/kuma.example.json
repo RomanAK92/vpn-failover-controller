@@ -1,0 +1,9 @@
+{
+  "base_url": "https://monitor.example.com",
+  "tokens": {
+    "wg-main": "REPLACE_WITH_KUMA_PUSH_TOKEN",
+    "wg-secondary": "REPLACE_WITH_KUMA_PUSH_TOKEN",
+    "ipsec-main": "REPLACE_WITH_KUMA_PUSH_TOKEN",
+    "ipsec-secondary": "REPLACE_WITH_KUMA_PUSH_TOKEN"
+  }
+}
