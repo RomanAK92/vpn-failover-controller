@@ -35,11 +35,24 @@ from this repository.
 
 ## Longer observation and release gate
 
-24-hour observation has been started separately for the Linux-only and mixed
-topologies. Its result is **pending**. A completed functional suite does not
-establish overnight stability or successful natural IPsec rekeys. The final
-executable candidate revision passed the functional suites before observation
-began. Documentation changes do not change that executable revision.
+The required observation was shortened to 12 hours. The initial mixed-topology
+observer stopped after approximately 85 minutes because a Docker command failed.
+Its diagnostic message did not identify the command or retain its error output,
+so the exact cause cannot be established retrospectively. Current tunnel health
+and application connectivity passed subsequent checks; that does not erase the
+failed observation or establish continuous stability.
+
+A new read-only 12-hour observation of both existing isolated topologies started
+on 2026-10-02 at 20:31 UTC without restarting their VPN containers. It records
+individual failing checks, return codes and error output, transient probe results
+and up to three command attempts with one-second retry delays. Any retries must
+be disclosed in the final results. Its result is **pending**. The original logs
+and failure evidence are retained; no 24-hour pass is claimed.
+
+A completed functional suite does not establish overnight stability or successful
+natural IPsec rekeys. The final executable candidate revision passed the
+functional suites before observation began. Documentation changes do not change
+that executable revision.
 
 GitHub Actions passed unit tests on Python 3.10, 3.12 and 3.13 and built/tested
 the image on the candidate branch and pull request. New revisions still require
