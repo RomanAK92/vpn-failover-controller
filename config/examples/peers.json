@@ -2,11 +2,19 @@
   "a": {
     "endpoint": "203.0.113.20",
     "port": 51889,
-    "public_key": "REPLACE_WITH_SECONDARY_ROUTER_PUBLIC_KEY"
+    "public_key": "REPLACE_WITH_SECONDARY_ROUTER_PUBLIC_KEY",
+    "local_id": "vpn-client-secondary",
+    "remote_id": "vpn-router-secondary",
+    "ike_proposals": "aes256-sha256-modp2048",
+    "esp_proposals": "aes256-sha256"
   },
   "b": {
     "endpoint": "203.0.113.10",
     "port": 51889,
-    "public_key": "REPLACE_WITH_MAIN_ROUTER_PUBLIC_KEY"
+    "public_key": "REPLACE_WITH_MAIN_ROUTER_PUBLIC_KEY",
+    "local_id": "vpn-client-primary",
+    "remote_id": "vpn-router-primary",
+    "ike_proposals": "aes256-sha256-modp2048",
+    "esp_proposals": "aes256-sha256"
   }
 }
