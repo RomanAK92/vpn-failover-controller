@@ -1,26 +1,39 @@
 #!/usr/bin/python3
-import subprocess as sp,pathlib,json
+"""Create only validated, reserved tunnel interfaces and private runtime configs."""
+import ipaddress
+import json
+import pathlib
 import guard
-c,d=guard.validate_files();guard.preflight(c,d)
-P=pathlib.Path('/etc/vpn'); R=pathlib.Path('/run/vpn-router'); R.mkdir(exist_ok=True)
-def run(*a):return sp.run(a,check=True,stdout=sp.PIPE,stderr=sp.PIPE,text=True).stdout.strip()
-def ip(*a):return run('ip',*a)
-def fw(*args):
- a=list(args);check=list(a);idx=next(i for i,x in enumerate(a) if x in ['-A','-I']);check[idx]='-C'
- if a[idx]=='-I' and a[idx+2].isdigit():check.pop(idx+2)
- if sp.run(['iptables']+check,stdout=sp.DEVNULL,stderr=sp.DEVNULL).returncode:run('iptables',*a)
+from ipsec_config import render_ipsec
 
-meta=json.loads((P/'peers.json').read_text())
-for suffix,i in [('a',101),('b',102)]:
- iface='vpn-wg-'+suffix
- key=(P/('wg-client-'+suffix+'.key')).read_text().strip()
- config=R/('wg-'+suffix+'.conf')
- config.write_text(f'[Interface]\nPrivateKey = {key}\nListenPort = {52000+i}\n[Peer]\nPublicKey = {meta[suffix]["public_key"]}\nAllowedIPs = 10.250.{i}.0/30, {c["subnet"]}\nEndpoint = {meta[suffix]["endpoint"]}:{meta[suffix].get("port",51889)}\nPersistentKeepalive = 25\n');config.chmod(0o600)
- 
- if sp.run(['ip','link','show',iface],stdout=sp.DEVNULL,stderr=sp.DEVNULL).returncode:ip('link','add',iface,'type','wireguard')
- run('wg','setconf',iface,str(config));ip('addr','replace',f'10.250.{i}.2/30','dev',iface);ip('link','set',iface,'mtu','1420','up')
- xi='vpn-ipsec-'+suffix
- if sp.run(['ip','link','show',xi],stdout=sp.DEVNULL,stderr=sp.DEVNULL).returncode:ip('link','add',xi,'type','xfrm','if_id',str(i))
- ip('addr','replace',f'10.251.{i}.2/32','dev',xi);ip('link','set',xi,'mtu','1400','up')
+def private_write(path, text):
+    with path.open('w') as f:
+        path.chmod(0o600)
+        f.write(text)
 
-print('Validated tunnel interfaces configured')
+def configure(c, meta, config_dir, runtime):
+    runtime.mkdir(exist_ok=True, mode=0o700)
+    for p in c['paths']:
+        iface=p['interface'];exists=guard.check(['ip','link','show',iface])
+        if p['kind']=='wireguard':
+            peer=meta[p['peer']]
+            key=(config_dir/('wg-client-'+p['peer']+'.key')).read_text().strip()
+            allowed=str(ipaddress.ip_interface(p['address']).network)+', '+c['subnet']
+            text=f'[Interface]\nPrivateKey = {key}\nListenPort = {p["listen_port"]}\n[Peer]\nPublicKey = {peer["public_key"]}\nAllowedIPs = {allowed}\nEndpoint = {peer["endpoint"]}:{peer.get("port",51889)}\nPersistentKeepalive = {p["keepalive"]}\n'
+            target=runtime/(iface+'.conf');private_write(target,text)
+            if not exists:guard.run(['ip','link','add',iface,'type','wireguard'])
+            guard.run(['wg','setconf',iface,str(target)])
+        elif not exists:
+            guard.run(['ip','link','add',iface,'type','xfrm','if_id',str(p['if_id'])])
+        guard.run(['ip','addr','replace',p['address'],'dev',iface])
+        guard.run(['ip','link','set',iface,'mtu',str(p['mtu']),'up'])
+    if c['ipsec_mode']=='generated':
+        secrets={p['peer']:(config_dir/('ipsec-'+p['peer']+'.key')).read_text().strip() for p in c['paths'] if p['kind']=='ipsec'}
+        private_write(runtime/'swan-client.conf',render_ipsec(c,meta,secrets))
+
+def main():
+    c,d=guard.validate_files();guard.preflight(c,d)
+    configure(c,json.loads((guard.P/'peers.json').read_text()),guard.P,pathlib.Path('/run/vpn-router'))
+    print('Validated tunnel interfaces configured')
+
+if __name__=='__main__':main()
