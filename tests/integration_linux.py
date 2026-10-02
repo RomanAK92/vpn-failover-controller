@@ -6,7 +6,7 @@ Generated credentials remain in a private temporary directory and are removed.
 Requires root/Docker and WireGuard/XFRM kernel support. No live router is used.
 """
 import argparse, hashlib, http.client, ipaddress, json, os, pathlib, secrets
-import shutil, subprocess as sp, sys, tempfile, time
+import shutil, subprocess as sp, sys, tempfile, time, re
 
 
 def run(*args, timeout=30, input=None):
@@ -57,8 +57,10 @@ def app_mode():
     ThreadingHTTPServer(('0.0.0.0',8080),Handler).serve_forever()
 
 
-def suite(root,keep=False):
-    root=pathlib.Path(root).resolve();tag='vpn-release-'+secrets.token_hex(4)
+def suite(root,keep=False,soak_seconds=0):
+    root=pathlib.Path(root).resolve();sys.path.insert(0,str(root/'build'))
+    from configuration import normalize
+    tag='vpn-release-'+secrets.token_hex(4)
     image=tag+':test';wan=tag+'-wan';appnet=tag+'-app'
     names={'main':tag+'-main','secondary':tag+'-secondary','vpn':tag+'-vpn','app':tag+'-app'}
     temp=pathlib.Path(tempfile.mkdtemp(prefix=tag+'-'));os.chmod(temp,0o700)
@@ -108,12 +110,12 @@ def suite(root,keep=False):
         record('image-build')
         run('docker','run','--rm','--network','none','--entrypoint','python3','-v',str(root)+':/source:ro',image,
             '-m','unittest','discover','-s','/source/tests','-v',timeout=60)
-        record('linux-unit-tests',count=17)
+        record('linux-unit-tests')
         for name,subnet in ((wan,'172.28.241.0/24'),(appnet,'172.28.240.0/24')):
             run('docker','network','create','--internal','--subnet',subnet,name);networks.append(name)
         controller=temp/'controller';controller.mkdir(mode=0o700)
         runtime=temp/'runtime';runtime.mkdir(mode=0o700)
-        config=json.loads((root/'config/examples/controller.json').read_text())
+        config=normalize(json.loads((root/'config/examples/controller.json').read_text()))
         (controller/'controller.json').write_text(json.dumps(config))
         (controller/'deployment.json').write_text(json.dumps({'app_subnet':'172.28.240.0/24',
             'publication':{'address':'172.28.240.10','port':8080,'tunnel_port':18081}}))
@@ -125,7 +127,11 @@ def suite(root,keep=False):
             peer_pub=run('docker','run','--rm','-i','--network','none','--entrypoint','wg',image,'pubkey',input=key+'\n')
             client_pub=run('docker','run','--rm','-i','--network','none','--entrypoint','wg',image,'pubkey',input=client_key+'\n')
             clients[suffix]=(ident,name,endpoint,secrets.token_hex(32))
-            public[suffix]={'endpoint':endpoint,'port':51889,'public_key':peer_pub}
+            public[suffix]={'endpoint':endpoint,'port':51889,'public_key':peer_pub,
+                'local_id':'vpn-client-'+('primary' if suffix=='b' else 'secondary'),
+                'remote_id':'vpn-router-'+('primary' if suffix=='b' else 'secondary'),
+                'ike_proposals':'aes256-sha256-modp2048','esp_proposals':'aes256-sha256'}
+            (controller/('ipsec-'+suffix+'.key')).write_text(clients[suffix][3]+'\n')
             (controller/('wg-client-'+suffix+'.key')).write_text(client_key+'\n')
             (peer/'peer.json').write_text(json.dumps({'id':ident,'name':name}))
             (peer/'wg.conf').write_text(f'[Interface]\nPrivateKey = {key}\nListenPort = 51889\n[Peer]\nPublicKey = {client_pub}\nAllowedIPs = 10.250.{ident}.2/32\n')
@@ -197,6 +203,23 @@ secrets {{
         wait_path('wg-main',timeout=180,all_healthy=True)
         initial_default=dx('vpn','ip','route','show','default')
         record('four-path-startup',active='wg-main')
+        deadline=time.monotonic()+30
+        while time.monotonic()<deadline:
+            diagnostic=sp.run(['docker','exec',names['vpn'],'python3','/app/status.py','--json'],capture_output=True,text=True)
+            if diagnostic.returncode==0:break
+            time.sleep(1)
+        else:raise RuntimeError('Readable status did not become healthy after startup')
+        command_status=json.loads(diagnostic.stdout)
+        if command_status['exit_code']!=0 or 'Active tunnel: wg-main' not in command_status['message']:raise RuntimeError('Readable status failed')
+        def network_snapshot():
+            # iptables-save includes wall timestamps and changing policy counters.
+            firewall='\n'.join(re.sub(r'\[\d+:\d+\]','[COUNTERS]',line) for line in dx('vpn','iptables-save').splitlines() if not line.startswith('#'))
+            return dx('vpn','ip','-j','rule','show')+dx('vpn','ip','route','show','table','all')+firewall
+        before=network_snapshot()
+        dx('vpn','python3','/app/doctor.py','--files-only')
+        after=network_snapshot()
+        if before!=after:raise RuntimeError('Read-only diagnostics changed networking')
+        record('readable-status-and-read-only-file-checker')
         for peer,ident in [('main',102),('secondary',101)]:
             inbound(peer,'10.60.0.60',f'10.250.{ident}.2')
             inbound(peer,'10.60.0.60',f'10.251.{ident}.2')
@@ -250,6 +273,18 @@ secrets {{
         else:raise RuntimeError('Healthcheck did not become healthy after recovery')
         http_from_app('main')
         record('healthcheck-and-256m-memory-limit')
+        if soak_seconds:
+            begin=time.monotonic();deadline=begin+soak_seconds;checks=0;last_report=begin
+            while time.monotonic()<deadline:
+                snapshot=state()
+                if snapshot['active']!='wg-main' or not all(snapshot['healthy'].values()):raise RuntimeError('Soak observation detected unhealthy VPN path')
+                if time.monotonic()-snapshot['monotonic']>snapshot['status_max_age']:raise RuntimeError('Soak observation found stale controller')
+                dx('vpn','python3','/app/health.py');http_from_app('main');checks+=1
+                if time.monotonic()-last_report>=300:
+                    print(json.dumps({'soak':'running','elapsed_seconds':round(time.monotonic()-begin),'checks':checks}),flush=True);last_report=time.monotonic()
+                time.sleep(min(10,max(0,deadline-time.monotonic())))
+            record('continuous-four-path-observation',seconds=soak_seconds,checks=checks)
+        if dx('vpn','ip','route','show','default')!=initial_default or run('ip','route','show','default')!=host_default:raise RuntimeError('Default route changed during observation')
         print(json.dumps({'result':'PASS','checks':len(results),'resources_prefix':tag}),flush=True)
     except Exception as e:
         print(json.dumps({'result':'FAIL','error':str(e),'passed_checks':len(results),'resources_prefix':tag}),flush=True)
@@ -268,8 +303,10 @@ secrets {{
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--root',default=str(pathlib.Path(__file__).resolve().parent.parent))
-    p.add_argument('--peer');p.add_argument('--app',action='store_true');p.add_argument('--keep',action='store_true')
+    p.add_argument('--peer');p.add_argument('--app',action='store_true');p.add_argument('--keep',action='store_true');p.add_argument('--soak-seconds',type=int,default=0)
     a=p.parse_args()
     if a.peer:peer_mode(a.peer)
     elif a.app:app_mode()
-    else:suite(a.root,a.keep)
+    else:
+        if not 0<=a.soak_seconds<=172800:p.error('soak-seconds must be between 0 and 172800')
+        suite(a.root,a.keep,a.soak_seconds)
