@@ -3,10 +3,11 @@
 A small container that keeps a server connected to an internal network through
 two routers, using WireGuard first and IPsec as backup.
 
-**Private reference release.** This is a sanitized copy of saved source, with
-publication-only changes. It has not been installed on the production VPS.
-Its generalized configuration and examples require testing on a separate Linux
-host before any deployment. This repository has no production deployment action.
+**Experimental reference release.** This is sanitized source with reusable
+example settings and a reproducible isolated Linux integration test. It has not
+been installed on the production VPS. Validate your own gateways, host firewall
+and provider paths before deployment. This repository has no production
+deployment action.
 
 ## How it works
 
@@ -97,6 +98,22 @@ python3 -m unittest discover -s tests -v
 python3 -m compileall -q build monitoring tests
 ```
 
+To reproduce the encrypted four-path integration suite on a dedicated Linux
+test host with Docker and root access:
+
+```sh
+sudo python3 tests/integration_linux.py
+```
+
+It builds this Dockerfile and starts two simulated Linux gateways, an application
+container and the controller in new internal Docker networks. No host ports are
+published and no live router is contacted. Disposable keys are generated locally
+and removed with the test containers and networks on completion. The harness
+checks failover/failback, all-path failure, application SNAT and negotiated TCP
+MSS, inbound publication and pinned replies, restarts and IPsec crash recovery.
+Do not run this root/Docker integration suite on production. `--keep` is only for
+debugging: it deliberately retains test resources and temporary credentials.
+
 For a separate test host only: prepare `config/local`, set restrictive file
 permissions, reserve the resources above, and create `/run/vpn-router` with mode
 0700. Then build and start using `docker compose build` and `docker compose up -d`.
@@ -116,14 +133,16 @@ current debounce is eight rounds and its messages assume three targets; update
 that reporter if changing those controller defaults.
 
 See [strongSwan configuration documentation](https://docs.strongswan.org/docs/latest/swanctl/swanctlConf.html)
-for the IPsec example fields. The example is a template, not a tested peer setup.
+for the IPsec example fields. Actual router identities and proposals must match
+your gateway; simulated Linux peers do not certify a vendor configuration.
 
 ## Publication boundary
 
 No live configs, private keys, passwords, push tokens, operational logs, router
 exports or server backups belong in Git. The repository does not contain hooks,
-remote SSH automation or GitHub Actions that deploy anything. Keep it private
-until ownership and an open-source license are agreed. Local tests verify
-decision logic and safeguards; they do not replace four-path Linux testing.
+remote SSH automation or GitHub Actions that deploy anything. Source is licensed
+under the [MIT License](LICENSE). Local unit tests verify decision logic and
+safeguards. The isolated Linux integration suite verifies a simulated topology;
+it does not certify every router, provider, kernel or long-running workload.
 
 Prepared by **r.abdulkhalek**.
