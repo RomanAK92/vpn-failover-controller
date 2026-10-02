@@ -36,6 +36,10 @@ that this container can change host networking: test installation separately.
 | --- | --- |
 | `build/controller.py` | Checks the four roads to the internal network and switches the selected route when needed. |
 | `build/selection.py` | Makes the priority and waiting-time decision without touching the network. |
+| `build/configuration.py` | Checks settings and supports custom tunnel addresses, ports, MTU and waiting times. |
+| `build/ipsec_config.py` | Builds matching IPsec traffic selectors from validated settings. |
+| `build/doctor.py` | Checks whether installation prerequisites are ready without changing networking. |
+| `build/status.py` | Explains active/standby paths, the last switch and recovery waiting time. |
 | `build/setup.py` | Creates the two WireGuard interfaces and the two IPsec interfaces. |
 | `build/guard.py` | Validates settings, rejects conflicting routes and repairs the exact routes, NAT and TCP MSS rules owned by this service. |
 | `build/supervisor.py` | Starts and watches the controller and IPsec daemon; records faults and delays repeated restarts. |
@@ -63,11 +67,13 @@ thresholds and ordered paths. `deployment.json` defines the Docker application
 subnet and optional inbound TCP publication. `publication: null` disables it.
 If enabled, provide `address`, `port`, and `tunnel_port`; return traffic is marked
 so it follows the incoming tunnel. `peers.json` contains router endpoints,
-WireGuard public keys and ports. `swan-client.conf` contains IPsec identities,
-matching proposals, traffic selectors and unique PSKs. Keep it private.
-If you change the internal prefix, also update the IPsec remote selectors.
+WireGuard public keys and ports. Legacy file mode uses `swan-client.conf` for
+IPsec identities, matching proposals, traffic selectors and unique PSKs. Keep it private.
+In the new `generated` IPsec mode, selectors follow controller settings and PSKs
+come from private `ipsec-a.key` / `ipsec-b.key` files. See the full
+[configuration guide](CONFIGURATION.md) for fields, compatibility and checks.
 
-This release deliberately reserves a fixed tunnel layout:
+The example reserves the following layout; schema version 2 makes it configurable:
 
 | Path | Interface | Client address | Routing table | XFRM ID |
 | --- | --- | --- | --- | --- |
@@ -81,7 +87,8 @@ router listener in the examples is UDP 51889; clients listen on 52101/52102.
 Reserve rule priorities 12201–12204, optional mark rules 12101–12104, marks
 0x5c01–0x5c04 and route protocol 186. Do not share these IDs/interfaces/tables
 with another VPN controller or IPsec daemon in the same host network namespace.
-Changing the fixed layout requires coordinated code and router changes.
+Changing the layout requires matching gateway changes and a reviewed migration
+of any old reserved host resources. It does not require Python edits.
 
 The host needs Docker's iptables `DOCKER-USER` chain, IPv4 forwarding, Linux
 WireGuard and XFRM interface support. Review reverse-path filtering and host
@@ -132,8 +139,13 @@ Uptime Kuma reporting is optional and runs separately. Copy the example to a
 private `kuma.json`, provide four push tokens, then run `kuma_push.py --config`
 with that file from a trusted scheduler with read access to runtime status.
 `--dry-run` prints classifications without sending heartbeats. The reporter's
-current debounce is eight rounds and its messages assume three targets; update
-that reporter if changing those controller defaults.
+debounce and target counts come from controller status. Update monitoring token
+mapping keys if you rename paths.
+
+Automated GitHub checks run unit tests and build the image using read-only
+repository permissions. They have no deployment job or infrastructure credentials.
+Longer isolated observation is available with `--soak-seconds 86400`; it must finish
+successfully before its outcome is reported. Real RouterOS validation is separate.
 
 See [strongSwan configuration documentation](https://docs.strongswan.org/docs/latest/swanctl/swanctlConf.html)
 for the IPsec example fields. Actual router identities and proposals must match
