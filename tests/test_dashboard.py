@@ -53,3 +53,10 @@ class DashboardTests(unittest.TestCase):
     def test_malformed_probe_results_rejected(self):
         data=fixture();data['probes']['road-1']='invalid'
         with self.assertRaises(ValueError):server.project(data,{})
+
+    def test_malformed_shapes_fail_closed_without_crashing(self):
+        for key, invalid in [('settings', []), ('probes', []), ('healthy', []), ('failure_rounds', {}), ('recovery_rounds', [])]:
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as directory:
+                data=fixture();data[key]=invalid;data['watchdog']={}
+                (pathlib.Path(directory)/'telemetry.json').write_text(json.dumps(data))
+                self.assertFalse(server.Monitor(directory).snapshot(101)['available'])
