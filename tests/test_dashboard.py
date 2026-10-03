@@ -49,3 +49,7 @@ class DashboardTests(unittest.TestCase):
     def test_unknown_switch_reason_not_exported(self):
         data=fixture();data['last_switch']={'time':99,'new':'road-1','reason':'password SECRET'}
         self.assertNotIn('SECRET',json.dumps(server.project(data,{})))
+
+    def test_malformed_probe_results_rejected(self):
+        data=fixture();data['probes']['road-1']='invalid'
+        with self.assertRaises(ValueError):server.project(data,{})
