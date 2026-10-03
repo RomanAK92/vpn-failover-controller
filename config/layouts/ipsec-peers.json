@@ -1,0 +1,30 @@
+{
+  "peer-1": {
+    "endpoint": "203.0.113.10",
+    "local_id": "vpn-client-1",
+    "remote_id": "vpn-gateway-1",
+    "ike_proposals": "aes256-sha256-modp2048",
+    "esp_proposals": "aes256-sha256"
+  },
+  "peer-2": {
+    "endpoint": "203.0.113.20",
+    "local_id": "vpn-client-2",
+    "remote_id": "vpn-gateway-2",
+    "ike_proposals": "aes256-sha256-modp2048",
+    "esp_proposals": "aes256-sha256"
+  },
+  "peer-3": {
+    "endpoint": "203.0.113.30",
+    "local_id": "vpn-client-3",
+    "remote_id": "vpn-gateway-3",
+    "ike_proposals": "aes256-sha256-modp2048",
+    "esp_proposals": "aes256-sha256"
+  },
+  "peer-4": {
+    "endpoint": "203.0.113.40",
+    "local_id": "vpn-client-4",
+    "remote_id": "vpn-gateway-4",
+    "ike_proposals": "aes256-sha256-modp2048",
+    "esp_proposals": "aes256-sha256"
+  }
+}

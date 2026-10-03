@@ -1,0 +1,22 @@
+{
+  "peer-1": {
+    "endpoint": "203.0.113.10",
+    "port": 51889,
+    "public_key": "REPLACE_WITH_GATEWAY_PUBLIC_KEY"
+  },
+  "peer-2": {
+    "endpoint": "203.0.113.20",
+    "port": 51889,
+    "public_key": "REPLACE_WITH_GATEWAY_PUBLIC_KEY"
+  },
+  "peer-3": {
+    "endpoint": "203.0.113.30",
+    "port": 51889,
+    "public_key": "REPLACE_WITH_GATEWAY_PUBLIC_KEY"
+  },
+  "peer-4": {
+    "endpoint": "203.0.113.40",
+    "port": 51889,
+    "public_key": "REPLACE_WITH_GATEWAY_PUBLIC_KEY"
+  }
+}

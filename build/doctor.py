@@ -15,12 +15,16 @@ def inspect(config_dir, network=True):
         # Parser errors may contain file content. Never echo them.
         report('ERROR','Configuration or credential validation failed ('+type(exc).__name__+'); check the configuration guide')
         return findings
-    report('OK','Configuration, four paths and credential formats validated')
+    kinds={p['kind'] for p in c['paths']}
+    report('OK','Configuration, '+str(len(c['paths']))+' paths and credential formats validated')
     for path in guard.P.iterdir():
         if path.is_file() and (path.suffix=='.key' or path.name=='swan-client.conf'):
             if stat.S_IMODE(path.stat().st_mode)&0o077:report('ERROR','Private credential file requires mode 0600: '+path.name)
     if not network:return findings
-    for tool in ('ip','iptables','wg','swanctl','ping'):
+    tools=['ip','iptables','ping']
+    if 'wireguard' in kinds:tools.append('wg')
+    if 'ipsec' in kinds:tools.append('swanctl')
+    for tool in tools:
         if not shutil.which(tool):report('ERROR','Required command missing: '+tool)
     if any(f['level']=='ERROR' for f in findings):return findings
     try:
@@ -38,9 +42,12 @@ def inspect(config_dir, network=True):
                 owned=guard.check(['ip','link','show',p['interface']])
                 port=guard.run(['wg','show',p['interface'],'listen-port']) if owned else ''
                 if port!=str(p['listen_port']):report('ERROR','WireGuard listen port occupied: '+str(p['listen_port']))
-        if occupied.intersection({500,4500}):report('ERROR','UDP 500/4500 already in use; stop the separate IKE service before starting this instance')
+        if 'ipsec' in kinds and occupied.intersection({500,4500}):report('ERROR','UDP 500/4500 already in use; stop the separate IKE service before starting this instance')
         modules=pathlib.Path('/proc/modules').read_text()
-        for module in ('wireguard','xfrm_interface'):
+        required_modules=[]
+        if 'wireguard' in kinds:required_modules.append('wireguard')
+        if 'ipsec' in kinds:required_modules.append('xfrm_interface')
+        for module in required_modules:
             if module+' ' in modules:report('OK','Kernel module loaded: '+module)
             else:report('WARN','Kernel support not proven by read-only checks: '+module+'; may be built in or loaded on first use')
         if pathlib.Path('/proc/sys/net/ipv4/conf/all/rp_filter').read_text().strip()=='1':report('WARN','Strict reverse-path filtering may reject asymmetric VPN traffic; review host and interface settings')

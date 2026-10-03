@@ -24,7 +24,7 @@ def validate_files():
  for peer in {p['peer'] for p in c['paths'] if p['kind']=='wireguard'}:
   key=(P/('wg-client-'+peer+'.key')).read_text().strip()
   if len(base64.b64decode(key,validate=True))!=32 or len(base64.b64decode(meta[peer]['public_key'],validate=True))!=32:raise ValueError('Invalid WireGuard key length')
- if c['ipsec_mode']=='file':
+ if c['ipsec_mode']=='file' and any(p['kind']=='ipsec' for p in c['paths']):
   if not (P/'swan-client.conf').is_file():raise ValueError('Missing IPsec configuration')
  else:
   for peer in {p['peer'] for p in c['paths'] if p['kind']=='ipsec'}:

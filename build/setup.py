@@ -27,7 +27,7 @@ def configure(c, meta, config_dir, runtime):
             guard.run(['ip','link','add',iface,'type','xfrm','if_id',str(p['if_id'])])
         guard.run(['ip','addr','replace',p['address'],'dev',iface])
         guard.run(['ip','link','set',iface,'mtu',str(p['mtu']),'up'])
-    if c['ipsec_mode']=='generated':
+    if c['ipsec_mode']=='generated' and any(p['kind']=='ipsec' for p in c['paths']):
         secrets={p['peer']:(config_dir/('ipsec-'+p['peer']+'.key')).read_text().strip() for p in c['paths'] if p['kind']=='ipsec'}
         private_write(runtime/'swan-client.conf',render_ipsec(c,meta,secrets))
 

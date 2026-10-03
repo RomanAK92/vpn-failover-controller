@@ -245,7 +245,7 @@ secrets {{
         wait_path('wg-main',timeout=100);record('stable-preferred-path-failback')
         block('secondary','wg',False);block('main','ipsec',False)
         wait_path('wg-main',all_healthy=True)
-        restarted=time.monotonic();run('docker','restart',names['vpn'],timeout=40)
+        run('docker','restart',names['vpn'],timeout=40);restarted=time.monotonic()
         wait_path('wg-main',timeout=120,all_healthy=True,since=restarted)
         record('container-restart-restores-four-paths')
         killed=time.monotonic()
@@ -258,7 +258,19 @@ secrets {{
         else:raise RuntimeError('Killed IPsec daemon did not trigger bounded container recovery')
         wait_path('wg-main',timeout=180,all_healthy=True,since=killed+5)
         record('ipsec-daemon-crash-automatic-recovery')
-        if dx('vpn','ip','route','show','default')!=initial_default:raise RuntimeError('Controller public default changed')
+        def verify_container_default():
+            # Docker may rename its network devices across namespace recreation.
+            # Check the gateway and WAN identity, rather than route text/ethN.
+            defaults=json.loads(dx('vpn','ip','-j','route','show','default'))
+            if len(defaults)!=1 or defaults[0].get('gateway')!='172.28.241.1':
+                raise RuntimeError('Controller public default gateway changed: '+json.dumps(defaults))
+            addresses=json.loads(dx('vpn','ip','-j','addr','show','dev',defaults[0]['dev']))
+            if not any(a.get('local')=='172.28.241.10' for link in addresses for a in link['addr_info']):
+                raise RuntimeError('Controller default route uses the wrong network')
+            current=dx('vpn','ip','route','show','default')
+            if current!=initial_default:
+                print(json.dumps({'event':'docker-wan-device-renamed','before':initial_default,'after':current}),flush=True)
+        verify_container_default()
         if run('ip','route','show','default')!=host_default:raise RuntimeError('Host default changed')
         record('controller-and-host-default-routes-preserved')
         health=json.loads(run('docker','inspect',names['vpn']))[0]
@@ -284,7 +296,8 @@ secrets {{
                     print(json.dumps({'soak':'running','elapsed_seconds':round(time.monotonic()-begin),'checks':checks}),flush=True);last_report=time.monotonic()
                 time.sleep(min(10,max(0,deadline-time.monotonic())))
             record('continuous-four-path-observation',seconds=soak_seconds,checks=checks)
-        if dx('vpn','ip','route','show','default')!=initial_default or run('ip','route','show','default')!=host_default:raise RuntimeError('Default route changed during observation')
+        verify_container_default()
+        if run('ip','route','show','default')!=host_default:raise RuntimeError('Host default route changed during observation')
         print(json.dumps({'result':'PASS','checks':len(results),'resources_prefix':tag}),flush=True)
     except Exception as e:
         print(json.dumps({'result':'FAIL','error':str(e),'passed_checks':len(results),'resources_prefix':tag}),flush=True)

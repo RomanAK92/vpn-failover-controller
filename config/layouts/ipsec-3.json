@@ -1,0 +1,61 @@
+{
+  "subnet": "10.60.0.0/24",
+  "targets": [
+    "10.60.0.10",
+    "10.60.0.60",
+    "10.60.0.1"
+  ],
+  "quorum": 2,
+  "interval": 2,
+  "failure_rounds": 8,
+  "recovery_rounds": 30,
+  "paths": [
+    {
+      "name": "ipsec-1",
+      "kind": "ipsec",
+      "peer": "peer-1",
+      "interface": "vpn-path-1",
+      "address": "10.251.1.2/32",
+      "table": 301,
+      "priority": 13001,
+      "mark_priority": 14001,
+      "mark": 3001,
+      "mtu": 1400,
+      "mss": 1360,
+      "if_id": 301,
+      "connection": "path-1"
+    },
+    {
+      "name": "ipsec-2",
+      "kind": "ipsec",
+      "peer": "peer-2",
+      "interface": "vpn-path-2",
+      "address": "10.251.2.2/32",
+      "table": 302,
+      "priority": 13002,
+      "mark_priority": 14002,
+      "mark": 3002,
+      "mtu": 1400,
+      "mss": 1360,
+      "if_id": 302,
+      "connection": "path-2"
+    },
+    {
+      "name": "ipsec-3",
+      "kind": "ipsec",
+      "peer": "peer-3",
+      "interface": "vpn-path-3",
+      "address": "10.251.3.2/32",
+      "table": 303,
+      "priority": 13003,
+      "mark_priority": 14003,
+      "mark": 3003,
+      "mtu": 1400,
+      "mss": 1360,
+      "if_id": 303,
+      "connection": "path-3"
+    }
+  ],
+  "ipsec_mode": "generated",
+  "schema_version": 2
+}

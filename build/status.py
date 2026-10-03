@@ -15,6 +15,7 @@ def summarize(v,w,now):
         paths=v['paths'];names=[p['name'] for p in paths];active=v['active'];settings=v['settings']
         if active is not None and active not in names:raise ValueError()
         lines=['Active tunnel: '+(active or 'NONE — managed network is unreachable'),f'Status age: {age:.1f}s']
+        if w.get('ike_required') is False:lines.append('IPsec daemon: not required by this configuration')
         code=0 if active is not None and v['healthy'].get(active) is True else 1
         for i,p in enumerate(paths):
             name=p['name'];probes=v['probes'][name];healthy=v['healthy'][name]

@@ -2,7 +2,8 @@
 
 A Docker service that keeps a Linux server and its applications connected to
 a remote private network. It automatically chooses a working VPN connection
-through two gateways, using WireGuard first and IPsec as backup.
+through one to four configured tunnels, using WireGuard, IPsec or a mixture.
+You choose the priority order.
 
 For example, a cloud application needs to reach a database inside your office.
 If the primary gateway or its internet connection fails, the service moves
@@ -10,7 +11,15 @@ private-network traffic to the secondary gateway. If WireGuard stops passing
 traffic, it can use IPsec instead. Once a preferred path is consistently healthy,
 it switches back automatically.
 
-**v0.2.0:** functional tests, hosted CI and the requested
+**v0.3.0:** adds one to four tunnels in any WireGuard/IPsec combination
+and fixes restart readiness so saved status alone cannot report a stopped
+controller as healthy. Start with the [plain-language two-WireGuard guide](QUICKSTART.md).
+See [configuration layouts](CONFIGURATION.md#choosing-a-layout) and the
+[completed four-hour validation report](VALIDATION_RC2.md). The ten-layout
+suite passed 94 checkpoints, and automatic CHILD rekeys passed on both IPsec
+connections. Review the documented deployment limits before installation.
+
+**Previous v0.2.0:** functional tests, hosted CI and the requested
 12-hour observation passed. One application ping needed a retry, and controller
 logs recorded brief probe warnings without a route switch. See
 [validation report and limits](VALIDATION_CANDIDATE.md), including the initial
@@ -24,10 +33,10 @@ This source release is not an automatic upgrade of an existing deployment.
 - Administrators who want a second gateway when the primary VPN path fails.
 - Sites that need IPsec as a fallback when WireGuard connectivity is interrupted.
 
-It manages one configured private IPv4 network prefix and exactly four paths.
+It manages one configured private IPv4 network prefix and one to four paths.
 It does not provide a remote-user VPN portal, configure MikroTik routers,
 replace a site's internet failover router or guarantee uninterrupted application
-sessions. The two gateways must both be able to reach the chosen private network.
+sessions. Every configured gateway must be able to reach the chosen private network.
 A shared failed switch, database or power supply cannot be repaired by changing VPN paths.
 
 ## Where it runs
@@ -48,7 +57,7 @@ host routes and selected firewall rules. It is not isolated from host networking
 Reserve its networking resources and test on a dedicated host before installing
 it beside critical applications or another VPN service.
 
-## Network layout
+## Example network layout
 
 ```mermaid
 flowchart LR
@@ -61,7 +70,7 @@ flowchart LR
     BACKUP --> LAN
 ```
 
-All four tunnels are monitored; one path carries the selected private-network
+All configured tunnels are monitored; one path carries the selected private-network
 route. The server's ordinary public internet and SSH use its existing default
 route. Optional inbound TCP publication allows a private-network client to call
 a configured Docker application port, with replies sent through the same tunnel.
@@ -70,10 +79,9 @@ Access still depends on your gateway and host firewall rules.
 ## What you need before deployment
 
 1. A Linux host with Docker Engine and Compose, root access, IPv4 forwarding,
-   WireGuard support and XFRM interfaces for IPsec. Docker must provide the
+   WireGuard support when using WireGuard, and XFRM interfaces when using IPsec. Docker must provide the
    `DOCKER-USER` firewall chain.
-2. Two separately reachable VPN gateways supporting WireGuard and compatible
-   IKEv2/IPsec settings. One physical MikroTik plus a Linux secondary has been
+2. Reachable VPN gateways supporting the protocols you configure. One physical MikroTik plus a Linux secondary has been
    tested; two physical MikroTiks and every RouterOS release have not.
 3. Matching gateway peers, keys, IPsec identities, encryption proposals,
    firewall permissions and routes to the private network. Router setup is manual.
@@ -117,8 +125,9 @@ Stopping the container does not remove all created host-network resources.
 
 ## How it works
 
-The preferred order is **WireGuard main → WireGuard secondary → IPsec main →
-IPsec secondary**. All four paths are checked, including standby paths. Each
+The example order is **WireGuard main → WireGuard secondary → IPsec main →
+IPsec secondary**. Your `paths` list defines the order; protocols have no hidden
+priority. All configured paths are checked, including standby paths. Each
 check uses that tunnel's own source address and routing table.
 
 The example checks three internal IP addresses every two seconds and requires
@@ -137,15 +146,15 @@ that this container can change host networking: test installation separately.
 
 | File | Plain-language purpose |
 | --- | --- |
-| `build/controller.py` | Checks the four roads to the internal network and switches the selected route when needed. |
+| `build/controller.py` | Checks the configured roads to the internal network and switches the selected route when needed. |
 | `build/selection.py` | Makes the priority and waiting-time decision without touching the network. |
 | `build/configuration.py` | Checks settings and supports custom tunnel addresses, ports, MTU and waiting times. |
 | `build/ipsec_config.py` | Builds matching IPsec traffic selectors from validated settings. |
 | `build/doctor.py` | Checks whether installation prerequisites are ready without changing networking. |
 | `build/status.py` | Explains active/standby paths, the last switch and recovery waiting time. |
-| `build/setup.py` | Creates the two WireGuard interfaces and the two IPsec interfaces. |
+| `build/setup.py` | Creates only the WireGuard/IPsec interfaces you configure. |
 | `build/guard.py` | Validates settings, rejects conflicting routes and repairs the exact routes, NAT and TCP MSS rules owned by this service. |
-| `build/supervisor.py` | Starts and watches the controller and IPsec daemon; records faults and delays repeated restarts. |
+| `build/supervisor.py` | Starts and watches the controller and, when configured, the IPsec daemon; records faults and delays repeated restarts. |
 | `build/cleanup_ipsec.py` | Removes validated leftover IPsec kernel objects belonging to this service after a crash. It never flushes all IPsec state. |
 | `build/health.py` | Tells Docker whether the controller, selected path and supervisor are healthy. |
 | `build/eventlog.py` | Turns events into readable log messages. |
@@ -211,21 +220,29 @@ python3 -m unittest discover -s tests -v
 python3 -m compileall -q build monitoring tests
 ```
 
-To reproduce the encrypted four-path integration suite on a dedicated Linux
+To reproduce the encrypted mixed four-path integration suite on a dedicated Linux
 test host with Docker and root access:
 
 ```sh
 sudo python3 tests/integration_linux.py
 ```
 
-It builds this Dockerfile and starts two simulated Linux gateways, an application
-container and the controller in new internal Docker networks. No host ports are
+For two/four WireGuard and two/four IPsec layouts with independent Linux
+gateways, run this separate suite on the dedicated test host:
+
+```sh
+sudo python3 tests/integration_flexible.py
+```
+
+These suites build this Dockerfile and start independent simulated Linux gateways,
+an application container and the controller in new internal Docker networks. No host ports are
 published and no live router is contacted. Disposable keys are generated locally
 and removed with the test containers and networks on completion. The harness
 checks failover/failback, all-path failure, application SNAT and negotiated TCP
 MSS, inbound publication and pinned replies, restarts and IPsec crash recovery.
-Do not run this root/Docker integration suite on production. `--keep` is only for
-debugging: it deliberately retains test resources and temporary credentials.
+Do not run either root/Docker integration suite on production. The original
+mixed suite provides `--keep` for debugging; it deliberately retains test
+resources and temporary credentials. The flexible suite cleans up automatically.
 
 For a separate test host only: prepare `config/local`, set restrictive file
 permissions, reserve the resources above, and create `/run/vpn-router` with mode
@@ -239,7 +256,7 @@ Logs: `docker logs --since 30m --timestamps vpn-router`. Runtime status:
 Event timestamps are rendered as MSK (UTC+3); Docker timestamps provide UTC.
 
 Uptime Kuma reporting is optional and runs separately. Copy the example to a
-private `kuma.json`, provide four push tokens, then run `kuma_push.py --config`
+private `kuma.json`, provide one push token per configured path, then run `kuma_push.py --config`
 with that file from a trusted scheduler with read access to runtime status.
 `--dry-run` prints classifications without sending heartbeats. The reporter's
 debounce and target counts come from controller status. Update monitoring token
