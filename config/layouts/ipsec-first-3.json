@@ -1,0 +1,61 @@
+{
+  "subnet": "10.60.0.0/24",
+  "targets": [
+    "10.60.0.10",
+    "10.60.0.60",
+    "10.60.0.1"
+  ],
+  "quorum": 2,
+  "interval": 2,
+  "failure_rounds": 8,
+  "recovery_rounds": 30,
+  "paths": [
+    {
+      "name": "ipsec-main",
+      "interface": "vpn-ipsec-b",
+      "kind": "ipsec",
+      "peer": "b",
+      "address": "10.251.102.2/32",
+      "table": 203,
+      "priority": 12203,
+      "mark_priority": 12103,
+      "mark": 23555,
+      "mtu": 1400,
+      "mss": 1360,
+      "if_id": 102,
+      "connection": "primary"
+    },
+    {
+      "name": "wg-main",
+      "interface": "vpn-wg-b",
+      "kind": "wireguard",
+      "peer": "b",
+      "address": "10.250.102.2/30",
+      "table": 202,
+      "priority": 12202,
+      "mark_priority": 12102,
+      "mark": 23554,
+      "mtu": 1420,
+      "mss": 1380,
+      "listen_port": 52102,
+      "keepalive": 25
+    },
+    {
+      "name": "ipsec-secondary",
+      "interface": "vpn-ipsec-a",
+      "kind": "ipsec",
+      "peer": "a",
+      "address": "10.251.101.2/32",
+      "table": 204,
+      "priority": 12204,
+      "mark_priority": 12104,
+      "mark": 23556,
+      "mtu": 1400,
+      "mss": 1360,
+      "if_id": 101,
+      "connection": "secondary"
+    }
+  ],
+  "ipsec_mode": "generated",
+  "schema_version": 2
+}
