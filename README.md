@@ -10,8 +10,11 @@ private-network traffic to the secondary gateway. If WireGuard stops passing
 traffic, it can use IPsec instead. Once a preferred path is consistently healthy,
 it switches back automatically.
 
-**v0.2.0 release candidate:** functional tests and hosted CI passed; extended
-stability observation is still pending. See [candidate validation and limits](VALIDATION_CANDIDATE.md).
+**v0.2.0 release candidate:** functional tests, hosted CI and the requested
+12-hour observation passed. One application ping needed a retry, and controller
+logs recorded brief probe warnings without a route switch. See
+[candidate validation and limits](VALIDATION_CANDIDATE.md), including the initial
+failed observation and the limits of the test setup.
 The earlier published release has a separate [v0.1.0 report](VALIDATION.md).
 The public candidate is not an automatic upgrade of an existing deployment.
 
