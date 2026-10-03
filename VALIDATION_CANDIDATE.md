@@ -1,8 +1,8 @@
-# v0.2.0 candidate validation
+# v0.2.0 validation
 
-This candidate adds reusable configuration and diagnostics. It can be published
-as a prerelease for independent evaluation while longer observation continues.
-It is not a stable v0.2.0 release or an automatic production upgrade.
+This release adds reusable configuration and diagnostics. This report documents
+its functional tests, the completed 12-hour observation and the limits of that
+evidence. Publishing the source does not upgrade any existing installation.
 
 ## Completed checks, 2026-10-02
 
@@ -83,12 +83,13 @@ GitHub Actions passed unit tests on Python 3.10, 3.12 and 3.13 and built/tested
 the image on the candidate branch and pull request. New revisions still require
 their own successful checks.
 
-The requested 12-hour observation and scoped cleanup are complete. The candidate
-is ready for release review with the limits and initial failed observation above
-disclosed. The draft pull request remains unmerged, and no stable release or
-production upgrade was performed by the observation follow-up. The immutable
+The requested 12-hour observation and scoped cleanup are complete. Final review
+verified all 33 repository file hashes against the prepared source and successful
+hosted checks on that revision. The limits and initial failed observation above
+remain disclosed. No production upgrade was performed. The immutable
 v0.2.0-rc.1 source archive retains its original pending-observation report;
-this branch contains the subsequent results.
+v0.2.0 includes the subsequent results. This report retains its original filename
+so links from earlier candidate documentation continue to work.
 
 ## Limits
 
