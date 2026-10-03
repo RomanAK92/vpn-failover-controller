@@ -15,4 +15,5 @@ assert.throws(()=>P.prepare({...settings,roads:[{...wg(1),profile:wg(1).profile.
 assert.throws(()=>P.prepare({...settings,roads:[wg(1),wg(1)]}),/overlap|Duplicate/);
 assert.throws(()=>P.prepare({...settings,appSubnet:'10.60.0.0/24',roads:[wg(1)]}),/overlap/);
 assert.throws(()=>P.prepare({...settings,roads:[{...wg(1),profile:wg(1).profile+'\n[Peer]'}]}),/Exactly one/);
+for(const secret of [' '+ 'a'.repeat(32), 'a'.repeat(32)+' ', 'a'.repeat(31)]){assert.throws(()=>P.prepare({...settings,roads:[{...ipsec(1),secret}]}),/secret/i);}
 console.log('Profile import safety and layout checks passed.');
