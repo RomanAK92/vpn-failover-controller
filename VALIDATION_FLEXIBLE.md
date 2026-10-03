@@ -64,6 +64,29 @@ readiness reporting, not tunnel priorities, failure thresholds, routes or MTU.
 The original failure logs remain preserved. The published `v0.3.0-rc.1` tag
 is unchanged and does not contain this follow-up fix.
 
+Follow-up readiness validation on 2026-10-03 passed 41 Linux unit tests,
+including actual lock acquisition/release. Windows passed the 40 portable
+tests and skipped that Linux-only lock test. The corrected encrypted flexible
+suite passed all 38 checkpoints and 12 restarts with zero application retries.
+A separate delayed-start test passed nine checkpoints and two restarts: both
+pre-supervisor health checks correctly failed while VPN interfaces were absent,
+and subsequent application requests passed without retries.
+
+The mixed WireGuard/IPsec regression passed all 17 checkpoints after review of
+its default-route assertion, including forced IPsec daemon recovery and Docker
+application traffic. The first follow-up mixed run passed 15 checkpoints but
+failed a route-text comparison after recovery. That comparison included Docker
+device names. Its failure is preserved; the old route strings were not captured,
+so a device rename is a suspected explanation, not a proven cause for that run.
+The revised assertion checks one default route, the expected WAN gateway and
+the WAN address on the selected device. The host default route still must match
+exactly. Both suites now reject controller heartbeats from graceful shutdown
+when waiting for restart completion.
+
+Owned test containers, networks, images and temporary credentials were removed.
+Existing test-VPS services and its host default route were preserved. No
+production system or live MikroTik was accessed during this investigation.
+
 Another initial check incorrectly assumed the WAN device would remain named
 `eth0`. Docker can reorder interface names on restart. Application traffic was
 working and the default gateway remained correct. The test now checks the actual
