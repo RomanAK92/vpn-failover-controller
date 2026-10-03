@@ -52,6 +52,8 @@ def project(status, watchdog):
         if path.get('kind') not in ('wireguard', 'ipsec'):
             raise ValueError('Invalid protocol')
         probes = path.get('probes', status.get('probes', {}).get(path['name'], {}))
+        if not isinstance(probes, dict):
+            raise ValueError('Invalid probe results')
         filtered = {}
         for address, ok in list(probes.items())[:8]:
             if ipaddress.ip_address(address).version == 4:
