@@ -29,6 +29,13 @@ def layout(kinds):
     return c
 
 class FlexibleTests(unittest.TestCase):
+    def test_published_layout_templates(self):
+        for kind in ('wireguard','ipsec'):
+            for count in (2,4):
+                c=configuration.normalize(json.loads((ROOT/'config/layouts'/f'{kind}-{count}.json').read_text()))
+                self.assertEqual(len(c['paths']),count)
+                self.assertEqual({p['kind'] for p in c['paths']},{kind})
+
     def test_priority_selection_for_two_and_four_paths(self):
         for n in (2,4):
             for active in range(n):
