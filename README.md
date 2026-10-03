@@ -11,12 +11,13 @@ private-network traffic to the secondary gateway. If WireGuard stops passing
 traffic, it can use IPsec instead. Once a preferred path is consistently healthy,
 it switches back automatically.
 
-**v0.3.0-rc.2:** adds one to four tunnels in any WireGuard/IPsec combination
+**v0.3.0:** adds one to four tunnels in any WireGuard/IPsec combination
 and fixes restart readiness so saved status alone cannot report a stopped
 controller as healthy. Start with the [plain-language two-WireGuard guide](QUICKSTART.md).
 See [configuration layouts](CONFIGURATION.md#choosing-a-layout) and the
-[new validation report](VALIDATION_FLEXIBLE.md). This is a release candidate;
-v0.2.0 remains the stable release.
+[completed four-hour validation report](VALIDATION_RC2.md). The ten-layout
+suite passed 94 checkpoints, and automatic CHILD rekeys passed on both IPsec
+connections. Review the documented deployment limits before installation.
 
 **Previous v0.2.0:** functional tests, hosted CI and the requested
 12-hour observation passed. One application ping needed a retry, and controller
