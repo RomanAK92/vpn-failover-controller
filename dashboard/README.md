@@ -86,7 +86,12 @@ volumes:
 
 Replace the example address with an address actually owned by the host, and
 limit access using the host firewall to authorized VPN clients. The dashboard
-does not create a VPN or firewall rules. HTTP is intended only inside the
+does not create a VPN or firewall rules. Direct VPN access also needs a correct
+return route to each management client: a listener on one tunnel address alone
+does not guarantee access while a different tunnel carries office replies.
+Use the loopback + SSH method for stable management independent of VPN
+selection, or have an administrator prepare and test separate management
+routing. This service intentionally does not alter controller routing. HTTP is intended only inside the
 encrypted SSH/VPN connection; use a trusted HTTPS reverse proxy if required.
 Enter the token in the password field and press Unlock. The browser keeps it
 only in page memory, not localStorage, URLs or diagnostics. Tokens are sent
