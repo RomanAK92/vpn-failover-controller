@@ -39,11 +39,30 @@ inside the managed private network. It did not match the deliberately scoped
 publication rule. The test now uses a managed-network source.
 
 Two initial two-WireGuard runs recorded a post-restart application TCP timeout
-despite successful tunnel probes. Their exact cause has not been established.
-A diagnostic rerun and the final three-restart run did not reproduce them.
-The final harness records retries and fails if application traffic does not
-recover within its bounded 30-second retry window. Passing later runs does not
-erase those initial failures or prove they cannot recur.
+despite successful tunnel probes. Follow-up investigation found a restart
+readiness race; the original failures did not have packet captures, so their
+exact packet-level cause cannot be conclusively attributed retrospectively.
+
+A captured run of 25 restarts that waited for readiness passed on the first
+application attempt every time. A separate ten-restart run deliberately sent
+traffic earlier: three first requests failed and then recovered on the next
+attempt. In one captured failure, the TCP SYN reached the VPN container while
+the main application route was absent; source-specific probe routes existed.
+The early health check was unhealthy in that run. Healthy tunnel probes alone
+therefore do not prove application forwarding is ready.
+
+A deterministic delayed-start reproduction also exposed a real health-check
+defect: recently saved status/watchdog files could report healthy before the
+new supervisor started, even with no VPN interfaces. Graceful shutdown can
+write a heartbeat after the restart request, so the old test's timestamp could
+also accept the previous controller's final heartbeat.
+
+The candidate branch now requires live supervisor and controller lock owners
+for readiness, invalidates the watchdog at startup and shutdown, and requires
+a controller heartbeat newer than Docker completing the restart. This changes
+readiness reporting, not tunnel priorities, failure thresholds, routes or MTU.
+The original failure logs remain preserved. The published `v0.3.0-rc.1` tag
+is unchanged and does not contain this follow-up fix.
 
 Another initial check incorrectly assumed the WAN device would remain named
 `eth0`. Docker can reorder interface names on restart. Application traffic was
@@ -53,7 +72,7 @@ An early mixed-suite upload omitted monitoring sources; after completing the
 upload, its unit tests and full encrypted regression suite passed.
 
 These findings are kept separate from the successful final results. v0.2.0
-remains the stable release while the restart timeout is investigated further.
+remains the stable release; follow-up changes are in the draft candidate PR.
 
 ## Limits
 
