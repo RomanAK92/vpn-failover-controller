@@ -15,6 +15,13 @@ container does not configure routers automatically.
 | Four IPsec | IPsec first → IPsec second → IPsec third → IPsec fourth |
 | Mixed | Any ordered combination of one to four WireGuard/IPsec paths |
 
+The candidate branch also includes wireguard-1.json, wireguard-3.json,
+ipsec-1.json, ipsec-3.json and ipsec-first-3.json for the planned stable release.
+These additional convenience templates were added after the RC2 tag; the RC2
+archive still supports those layouts but does not contain these extra files.
+The IPsec-first mixed template uses gateway identifiers a/b and the matching
+config/examples/peers.json, rather than the peer-1/peer-2 standalone templates.
+
 Use the matching controller template in `config/layouts` as a starting point.
 Copy the matching `wireguard-peers.json` or `ipsec-peers.json` template to
 `config/local/peers.json` and replace its documentation endpoints/placeholders.
