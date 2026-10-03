@@ -29,7 +29,7 @@ Previous readiness validation passed 41 Linux unit tests, the 38-checkpoint
 two/four-path suite, delayed-start checks and the 17-checkpoint mixed suite.
 See [the retained investigation and limits](VALIDATION_FLEXIBLE.md).
 
-## Four-hour observation: running
+## Four-hour observation: passed
 
 The application observation began 2026-10-03 10:52:29 UTC, with a requested
 duration of 14,400 seconds. It checks fresh controller/supervisor state, all
@@ -37,15 +37,20 @@ four paths, active-path outbound application traffic and inbound application
 requests through every WireGuard/IPsec path. No forced rekey or shortened IPsec
 rekey timer is part of this observation.
 
-Completion, final checks and explicit natural IPsec rekey evidence are pending.
-Stable promotion must wait for those results and successful final CI/review.
-Do not interpret this report as a completed observation or twelve-hour validation.
+The run completed with exit code 0 after 14,400 elapsed seconds and 1,280
+application sweeps. All four paths remained healthy; each sweep checked outbound
+application traffic and inbound requests through all four paths.
+
+Retained strongSwan logs explicitly confirm natural CHILD_SA rekeys on both
+IPsec connections: replacement inbound/outbound SAs were established and the
+old CHILD_SAs were closed. This proves CHILD rekeys, not natural IKE rekeys.
+No forced rekey or shortened timer was used during observation. This is four-hour
+validation, not twelve-hour validation. Final CI/review remains a promotion gate.
 
 ## Isolation and limits
 
-Production and live routers were not accessed. Expanded test resources and
-temporary credentials were removed. Observation resources remain while the
-test runs and must be checked for scoped cleanup afterward. Existing VPS
+Production and live routers were not accessed. Expanded and observation test resources,
+images and temporary credentials were removed by scoped cleanup. Existing VPS
 services, unrelated networking and operational logs are preserved.
 
 Functional tests do not establish maximum throughput, uninterrupted existing
