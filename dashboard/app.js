@@ -7,8 +7,9 @@ function tab(which){$('monitor').hidden=which!=='monitor';$('setup').hidden=whic
 $('monitorTab').onclick=()=>tab('monitor');$('setupTab').onclick=()=>tab('setup');
 function show(state){
   latest=state;const available=state.available===true;
-  $('overall').textContent=available?(state.active?'Private network connected':'No working road'):'Monitoring unavailable';
-  $('overall').className='badge '+(available&&state.active?'good':'bad');
+  const activeHealthy=available&&(state.paths||[]).some(p=>p.name===state.active&&p.healthy);
+  $('overall').textContent=available?(activeHealthy?'Private network connected':state.active?'Selected road probe failing':'No working road'):'Monitoring unavailable';
+  $('overall').className='badge '+(activeHealthy?'good':'bad');
   $('statusMessage').textContent=state.message||(available?'Updated '+state.age_seconds+' seconds ago. Public internet uses its existing route.':'Status is stale or supervision failed. Showing last-known values only.');
   $('roads').replaceChildren();
   for(const [i,p] of (state.paths||[]).entries()){
