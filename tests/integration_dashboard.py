@@ -14,11 +14,11 @@ print(json.dumps({'status':r.status,'body':r.read().decode(),'csp':r.headers.get
 """
         code="AUTH=%r;ADDRESS=%r;PATH=%r;SOURCE=%r\n"%(auth,address,path,'10.60.0.60' if origin=='main' else address)+code
         return json.loads(dx(origin,'python3','-c',code))
-    def wait_dashboard(want=None, available=True):
+    def wait_dashboard(want=None, available=True, address='10.250.102.2'):
         deadline=time.monotonic()+35;last='No response'
         while time.monotonic()<deadline:
             try:
-                row=request('10.250.102.2',origin='vpn');data=json.loads(row['body'])
+                row=request(address,origin='vpn');data=json.loads(row['body'])
                 if row['status']==200 and data['available']==available and (want is None or data['active']==want):return data
             except (RuntimeError,ValueError) as e:last=str(e)
             time.sleep(1)
@@ -34,8 +34,10 @@ print(json.dumps({'status':r.status,'body':r.read().decode(),'csp':r.headers.get
         run('docker','build','-t',image,str(root/'dashboard'),timeout=600)
         run('docker','cp',str(token_file),names['main']+':/tmp/dashboard-test-token')
         dx('main','chmod','600','/tmp/dashboard-test-token')
-        run('docker','cp',str(token_file),names['vpn']+':/tmp/dashboard-test-token')
-        dx('vpn','chmod','600','/tmp/dashboard-test-token')
+        # Docker cp refuses a read-only rootfs even for a tmpfs destination.
+        # Send only this disposable test token on stdin into the writable tmpfs.
+        run('docker','exec','-i',names['vpn'],'python3','-c',
+            "import os,sys;fd=os.open('/tmp/dashboard-test-token',os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600);os.write(fd,sys.stdin.buffer.read());os.close(fd)",input=token_file.read_text())
         before=network_snapshot();mirror=start_mirror();start_dashboard('10.250.102.2')
         data=wait_dashboard('wg-main')
         if len(data['paths'])!=4 or not all(p['healthy'] for p in data['paths']):raise RuntimeError('Live four-path telemetry missing')
@@ -60,7 +62,7 @@ print(json.dumps({'status':r.status,'body':r.read().decode(),'csp':r.headers.get
         if not any('wg-secondary' in e['message'] and 'Route changed' in e['message'] for e in data['events']):raise RuntimeError('Live switch event missing')
         http_from_app('secondary');record('dashboard-real-failover-and-application-connectivity')
         block('secondary','wg',True);wait_path('ipsec-main');wait_dashboard('ipsec-main');http_from_app('main')
-        run('docker','rm','-f',name);start_dashboard('10.251.102.2');time.sleep(3)
+        run('docker','rm','-f',name);start_dashboard('10.251.102.2');wait_dashboard('ipsec-main',address='10.251.102.2')
         row=request('10.251.102.2')
         if row['status']!=200 or json.loads(row['body'])['active']!='ipsec-main':raise RuntimeError('IPsec authenticated dashboard access failed')
         if 'peer-ipsec' not in dx('main','ip','route','get','10.251.102.2'):raise RuntimeError('IPsec dashboard request did not use VPN route')
@@ -75,6 +77,10 @@ print(json.dumps({'status':r.status,'body':r.read().decode(),'csp':r.headers.get
         block('main','wg',False);block('secondary','wg',False);wait_path('wg-main',all_healthy=True);wait_dashboard('wg-main')
         if request('10.250.102.2')['status']!=200:raise RuntimeError('External WG access did not recover')
         record('dashboard-preferred-route-recovery')
+    except Exception:
+        logs=subprocess.run(['docker','logs','--tail','20',name],text=True,capture_output=True)
+        print('Dashboard test listener diagnostics: '+logs.stdout+logs.stderr,flush=True)
+        raise
     finally:
         if mirror is not None:mirror.terminate();mirror.wait(timeout=5)
         subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
