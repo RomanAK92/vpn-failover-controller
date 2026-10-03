@@ -62,9 +62,20 @@ add your actual SSH -p option when necessary. No access token is required for
 the loopback default. Do not forward this port to public WAN.
 
 For direct access through an existing trusted VPN, bind explicitly to the
-host's PRIVATE VPN IPv4 address and provide a token file of at least32characters.
+host's PRIVATE VPN IPv4 address and provide a token file of at least 32 characters.
 Wildcard/public binding is rejected. Mount the token file read-only, readable
-only by the dashboard's UID65532, and override the service command:
+only by the dashboard's UID 65532. On your separate test host, create a token
+in a private directory (do not commit this file):
+
+```sh
+umask 077
+openssl rand -hex 32 > dashboard-token
+sudo chown 65532:65532 dashboard-token
+sudo chmod 0400 dashboard-token
+```
+
+Use the absolute path of that file in the read-only mount, and override the
+service command:
 
 ```yaml
 command: [python3, server.py, --bind, 10.250.1.2, --token-file, /auth/token]
@@ -99,6 +110,23 @@ persistent history are future work, not silently enabled here.
 ```sh
 python3 -m unittest discover -s tests -v
 node tests/test_profiles.cjs
+node tests/test_dashboard_ui.cjs
 ```
+
+For encrypted live-status acceptance, use a **disposable Linux test host**,
+never production. The optional suite creates its own two Linux gateways,
+four encrypted paths, an application and the dashboard. It publishes no host
+ports and removes its temporary resources and credentials when done:
+
+```sh
+sudo python3 tests/integration_linux.py --dashboard
+```
+
+It checks authenticated WireGuard/IPsec access, wrong/missing token rejection,
+real switching events, stale telemetry and recovery, application connectivity,
+restricted container privileges and unchanged VPN networking during monitoring.
+These are simulated Linux gateways, not a dashboard validation against live
+MikroTik hardware. See [dashboard validation](VALIDATION.md) for actual results
+and remaining limits.
 
 Prepared by **r.abdulkhalek**.
