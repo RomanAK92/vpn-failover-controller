@@ -181,7 +181,10 @@ secrets {{ ike-test {{
                 for i in range(1,count-1):block(i,False)
                 wait('path-0',True);record(label+'-recovery-and-failback')
                 for restart_round in range(3):
-                    since=time.monotonic();run('docker','restart',vpn,timeout=40);wait('path-0',True,since=since,timeout=180)
+                    run('docker','restart',vpn,timeout=40)
+                    # Shutdown may write a heartbeat after the restart request.
+                    # Require a heartbeat newer than Docker completing the restart.
+                    since=time.monotonic();wait('path-0',True,since=since,timeout=180)
                     end=time.monotonic()+30
                     while time.monotonic()<end:
                         if sp.run(['docker','exec',vpn,'python3','/app/health.py'],capture_output=True).returncode==0:break
