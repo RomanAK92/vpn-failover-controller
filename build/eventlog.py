@@ -12,7 +12,7 @@ def render(event, timestamp=None, **data):
   failed=[name(k) for k,v in data['health'].items() if not v]
   if failed:
    level='WARN';message='Health check failed: '+', '.join(failed)+'. This probe result alone does not mean a failover.'
-  else:message='All four VPN paths passed their health checks.'
+  else:message='All configured VPN paths passed their health checks.'
  elif event=='switch':
   if data.get('new') is None:
    level='WARN';message='No usable VPN path selected. Internal VPN traffic is unavailable.'
