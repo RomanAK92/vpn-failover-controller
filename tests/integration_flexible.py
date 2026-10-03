@@ -67,8 +67,14 @@ def suite(root):
         results.append({'test':name,'passed':True,**detail});print(json.dumps(results[-1]),flush=True)
     try:
         run('docker','build','-t',image,str(root/'build'),timeout=600)
-        for kind,count in [('wireguard',2),('wireguard',4),('ipsec',2),('ipsec',4)]:
-            label=kind+'-'+str(count);tag=prefix+'-'+label;wan=tag+'-wan';appnet=tag+'-app'
+        layouts=[('wireguard-1',['wireguard']),('wireguard-2',['wireguard']*2),
+                 ('wireguard-3',['wireguard']*3),('wireguard-4',['wireguard']*4),
+                 ('ipsec-1',['ipsec']),('ipsec-2',['ipsec']*2),
+                 ('ipsec-3',['ipsec']*3),('ipsec-4',['ipsec']*4),
+                 ('ipsec-first-3',['ipsec','wireguard','ipsec']),
+                 ('interleaved-4',['wireguard','ipsec','wireguard','ipsec'])]
+        for label,kinds in layouts:
+            count=len(kinds);tag=prefix+'-'+label;wan=tag+'-wan';appnet=tag+'-app'
             containers=[];networks=[];temp=Path(tempfile.mkdtemp(prefix=tag+'-'));temp.chmod(0o700)
             vpn=tag+'-vpn';app=tag+'-app';peers=[]
             def dx(name,*cmd,timeout=30):return run('docker','exec',name,*cmd,timeout=timeout)
@@ -99,6 +105,7 @@ def suite(root):
                 c.update(interval=1,failure_rounds=4,recovery_rounds=8,ipsec_mode='generated')
                 meta={}
                 for i in range(count):
+                    kind=kinds[i]
                     name='path-'+str(i);peer='peer-'+str(i);endpoint='172.28.245.'+str(11+i)
                     p=dict(name=name,kind=kind,peer=peer,interface='vpn-path-'+str(i),address=f'10.{250 if kind=="wireguard" else 251}.{i}.2/{30 if kind=="wireguard" else 32}',table=301+i,priority=13001+i,mark_priority=14001+i,mark=3001+i,mtu=1420 if kind=='wireguard' else 1400,mss=1380 if kind=='wireguard' else 1360)
                     directory=temp/peer;directory.mkdir(mode=0o700)
@@ -164,12 +171,12 @@ secrets {{ ike-test {{
                     code="import http.client; c=http.client.HTTPConnection(%r,18081,timeout=5,source_address=('10.60.0.60',0)); c.request('GET','/'); r=c.getresponse(); print(r.read().decode() if r.status==200 else 'ERROR')"%p['source']
                     if dx(peers[i],'python3','-c',code)!='application-ok':raise RuntimeError('Inbound publication failed')
                 record(label+'-all-inbound-pinned-replies')
-                if kind=='wireguard':
+                if all(kind=='wireguard' for kind in kinds):
                     if (runtime/'swan-client.conf').exists() or (runtime/'charon.vici').exists():raise RuntimeError('WireGuard-only started IPsec')
                     links=json.loads(dx(vpn,'ip','-d','-j','link','show'))
                     if any(p.get('linkinfo',{}).get('info_kind')=='xfrm' for p in links):raise RuntimeError('Unexpected XFRM interface')
                     record(label+'-no-ipsec-daemon-or-interfaces')
-                elif dx(vpn,'wg','show','interfaces'):raise RuntimeError('Unexpected WireGuard interface')
+                elif all(kind=='ipsec' for kind in kinds) and dx(vpn,'wg','show','interfaces'):raise RuntimeError('Unexpected WireGuard interface')
                 for i in range(count-1):
                     block(i,True);wait('path-'+str(i+1));application(i+1)
                 record(label+'-ordered-failover-snat-mss')
@@ -177,7 +184,8 @@ secrets {{ ike-test {{
                 if 'unreachable' not in dx(vpn,'ip','route','show','10.60.0.0/24'):raise RuntimeError('Fail-closed route missing')
                 record(label+'-all-down-fails-closed')
                 block(count-1,False);wait('path-'+str(count-1));application(count-1)
-                block(0,False);wait('path-0');application(0)
+                if count>1:block(0,False)
+                wait('path-0');application(0)
                 for i in range(1,count-1):block(i,False)
                 wait('path-0',True);record(label+'-recovery-and-failback')
                 for restart_round in range(3):
@@ -219,7 +227,7 @@ secrets {{ ike-test {{
                 for container in reversed(containers):sp.run(['docker','rm','-f',container],capture_output=True)
                 for network in reversed(networks):sp.run(['docker','network','rm',network],capture_output=True)
                 shutil.rmtree(temp)
-        print(json.dumps({'result':'PASS','checks':len(results),'layouts':['2 WireGuard','4 WireGuard','2 IPsec','4 IPsec']}),flush=True)
+        print(json.dumps({'result':'PASS','checks':len(results),'layouts':[name for name,_ in layouts]}),flush=True)
     finally:
         sp.run(['docker','image','rm',image],capture_output=True)
         if run('ip','route','show','default')!=baseline:raise RuntimeError('Host default changed after cleanup')
