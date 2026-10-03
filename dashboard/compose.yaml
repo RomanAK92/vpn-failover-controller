@@ -1,0 +1,16 @@
+services:
+  vpn-dashboard:
+    build: .
+    network_mode: host
+    user: "65532:65532"
+    cap_drop: [ALL]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    pids_limit: 64
+    mem_limit: 128m
+    volumes:
+      - /run/vpn-dashboard:/telemetry:ro
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: "2"}
