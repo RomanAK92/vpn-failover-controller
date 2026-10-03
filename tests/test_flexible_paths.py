@@ -76,6 +76,10 @@ class FlexibleTests(unittest.TestCase):
                           'local_id':'client-'+str(i),'remote_id':'peer-'+str(i),
                           'ike_proposals':'aes256-sha256-modp2048','esp_proposals':'aes256-sha256'}
                           for i,p in enumerate(c['paths'])}
+                    for m in meta.values():
+                        if kind=='ipsec':del m['public_key']
+                        else:
+                            for field in ('local_id','remote_id','ike_proposals','esp_proposals'):del m[field]
                     for name,obj in [('controller',c),('deployment',json.loads((ROOT/'config/examples/deployment.json').read_text())),('peers',meta)]:
                         (root/(name+'.json')).write_text(json.dumps(obj))
                     for p in c['paths']:
