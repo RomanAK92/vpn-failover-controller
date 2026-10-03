@@ -11,7 +11,10 @@ private-network traffic to the secondary gateway. If WireGuard stops passing
 traffic, it can use IPsec instead. Once a preferred path is consistently healthy,
 it switches back automatically.
 
-**v0.3.0 development:** adds flexible tunnel lists. See [configuration layouts](CONFIGURATION.md#choosing-a-layout).
+**v0.3.0-rc.1:** adds one to four tunnels in any WireGuard/IPsec combination.
+See [configuration layouts](CONFIGURATION.md#choosing-a-layout) and the
+[new validation report](VALIDATION_FLEXIBLE.md). This is a release candidate;
+v0.2.0 remains the stable release.
 
 **Previous v0.2.0:** functional tests, hosted CI and the requested
 12-hour observation passed. One application ping needed a retry, and controller
@@ -228,14 +231,15 @@ gateways, run this separate suite on the dedicated test host:
 sudo python3 tests/integration_flexible.py
 ```
 
-It builds this Dockerfile and starts two simulated Linux gateways, an application
-container and the controller in new internal Docker networks. No host ports are
+These suites build this Dockerfile and start independent simulated Linux gateways,
+an application container and the controller in new internal Docker networks. No host ports are
 published and no live router is contacted. Disposable keys are generated locally
 and removed with the test containers and networks on completion. The harness
 checks failover/failback, all-path failure, application SNAT and negotiated TCP
 MSS, inbound publication and pinned replies, restarts and IPsec crash recovery.
-Do not run this root/Docker integration suite on production. `--keep` is only for
-debugging: it deliberately retains test resources and temporary credentials.
+Do not run either root/Docker integration suite on production. The original
+mixed suite provides `--keep` for debugging; it deliberately retains test
+resources and temporary credentials. The flexible suite cleans up automatically.
 
 For a separate test host only: prepare `config/local`, set restrictive file
 permissions, reserve the resources above, and create `/run/vpn-router` with mode
