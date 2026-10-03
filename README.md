@@ -1,16 +1,119 @@
 # VPN failover controller
 
-A small container that keeps a server connected to an internal network through
-two routers, using WireGuard first and IPsec as backup.
+A Docker service that keeps a Linux server and its applications connected to
+a remote private network. It automatically chooses a working VPN connection
+through two gateways, using WireGuard first and IPsec as backup.
 
-**Experimental reference release.** This is sanitized source with reusable
-example settings and a reproducible isolated Linux integration test. It has not
-been installed on the production VPS. Validate your own gateways, host firewall
-and provider paths before deployment. This repository has no production
-deployment action.
+For example, a cloud application needs to reach a database inside your office.
+If the primary gateway or its internet connection fails, the service moves
+private-network traffic to the secondary gateway. If WireGuard stops passing
+traffic, it can use IPsec instead. Once a preferred path is consistently healthy,
+it switches back automatically.
 
-See [v0.1.0 validation](VALIDATION.md) for the isolated four-path test results
-and their limits.
+**v0.2.0:** functional tests, hosted CI and the requested
+12-hour observation passed. One application ping needed a retry, and controller
+logs recorded brief probe warnings without a route switch. See
+[validation report and limits](VALIDATION_CANDIDATE.md), including the initial
+failed observation and the limits of the test setup.
+The earlier published release has a separate [v0.1.0 report](VALIDATION.md).
+This source release is not an automatic upgrade of an existing deployment.
+
+## Who it is for
+
+- Teams running a cloud application that must reach office databases, APIs or other private servers.
+- Administrators who want a second gateway when the primary VPN path fails.
+- Sites that need IPsec as a fallback when WireGuard connectivity is interrupted.
+
+It manages one configured private IPv4 network prefix and exactly four paths.
+It does not provide a remote-user VPN portal, configure MikroTik routers,
+replace a site's internet failover router or guarantee uninterrupted application
+sessions. The two gateways must both be able to reach the chosen private network.
+A shared failed switch, database or power supply cannot be repaired by changing VPN paths.
+
+## Where it runs
+
+| Location | Suitability |
+| --- | --- |
+| Linux VPS or cloud VM | Intended deployment location, provided you have root access, Docker and the required kernel networking features. |
+| Linux server or dedicated Linux VM on premises | Possible with the same requirements and reachable remote gateways; validate your own host first. |
+| Portainer-managed Linux Docker host | The Compose service can be managed there after its configuration, mounts and host requirements are prepared. Portainer is optional. |
+| MikroTik router | The router is a VPN gateway. This Python/Docker service runs on Linux, not RouterOS. |
+| Windows or macOS / Docker Desktop | Useful for editing or unit tests; host-network VPN deployment is not validated there. Use a separate Linux host. |
+| Unprivileged shared hosting | Unsuitable: the service needs permission to manage Linux routes, interfaces and firewall rules. |
+
+The image uses strongSwan for IPsec, Linux WireGuard tools, a small Python
+controller and a supervisor. Docker packages these components into one service.
+The supplied Compose file uses the Linux host network: the container changes
+host routes and selected firewall rules. It is not isolated from host networking.
+Reserve its networking resources and test on a dedicated host before installing
+it beside critical applications or another VPN service.
+
+## Network layout
+
+```mermaid
+flowchart LR
+    APP[Linux server and Docker applications] --> CTRL[VPN failover controller]
+    CTRL -->|1: WireGuard| MAIN[Main gateway]
+    CTRL -->|2: WireGuard| BACKUP[Secondary gateway]
+    CTRL -->|3: IPsec| MAIN
+    CTRL -->|4: IPsec| BACKUP
+    MAIN --> LAN[Private network: databases and APIs]
+    BACKUP --> LAN
+```
+
+All four tunnels are monitored; one path carries the selected private-network
+route. The server's ordinary public internet and SSH use its existing default
+route. Optional inbound TCP publication allows a private-network client to call
+a configured Docker application port, with replies sent through the same tunnel.
+Access still depends on your gateway and host firewall rules.
+
+## What you need before deployment
+
+1. A Linux host with Docker Engine and Compose, root access, IPv4 forwarding,
+   WireGuard support and XFRM interfaces for IPsec. Docker must provide the
+   `DOCKER-USER` firewall chain.
+2. Two separately reachable VPN gateways supporting WireGuard and compatible
+   IKEv2/IPsec settings. One physical MikroTik plus a Linux secondary has been
+   tested; two physical MikroTiks and every RouterOS release have not.
+3. Matching gateway peers, keys, IPsec identities, encryption proposals,
+   firewall permissions and routes to the private network. Router setup is manual.
+4. Two or more reliable internal hosts that answer the configured ping probes,
+   separate non-overlapping tunnel/application networks and unused routing IDs.
+5. A reviewed rollback and console access before changing a critical host.
+
+The example limits the container to 256 MiB RAM. It passed the functional test
+workload at that limit; this is not a throughput or production-capacity guarantee.
+
+## Installation outline
+
+Start on a separate Linux test host. Installation is a network configuration
+task, not simply starting an image with its example values.
+
+1. Download the chosen release's source archive from GitHub and extract it.
+2. Copy `config/examples` to `config/local`; replace placeholders using the
+   [configuration guide](CONFIGURATION.md). Create private keys and configure
+   matching peers on both gateways. Set the configuration directory to mode
+   0700 and credential files to 0600.
+3. Prepare the host forwarding, firewall and kernel requirements. Create
+   `/run/vpn-router` with mode 0700 and make sure no other service uses the
+   reserved interfaces, rules, tables or IPsec UDP listeners.
+4. Build the image and run the read-only prerequisite check while the service
+   is stopped. Resolve errors before starting it.
+
+```sh
+docker compose build
+docker compose run --rm --entrypoint python3 vpn-router /app/doctor.py
+docker compose up -d
+docker exec vpn-router python3 /app/status.py
+docker logs --since 10m --timestamps vpn-router
+```
+
+5. Verify application traffic, each standby path, failover and recovery in the
+   test environment. Confirm public SSH and the host default route still work.
+   Adopt it on a production host only after reviewing the results and rollback.
+
+Stopping the container does not remove all created host-network resources.
+`docker compose down` alone is not a complete network rollback.
 
 ## How it works
 
@@ -36,6 +139,10 @@ that this container can change host networking: test installation separately.
 | --- | --- |
 | `build/controller.py` | Checks the four roads to the internal network and switches the selected route when needed. |
 | `build/selection.py` | Makes the priority and waiting-time decision without touching the network. |
+| `build/configuration.py` | Checks settings and supports custom tunnel addresses, ports, MTU and waiting times. |
+| `build/ipsec_config.py` | Builds matching IPsec traffic selectors from validated settings. |
+| `build/doctor.py` | Checks whether installation prerequisites are ready without changing networking. |
+| `build/status.py` | Explains active/standby paths, the last switch and recovery waiting time. |
 | `build/setup.py` | Creates the two WireGuard interfaces and the two IPsec interfaces. |
 | `build/guard.py` | Validates settings, rejects conflicting routes and repairs the exact routes, NAT and TCP MSS rules owned by this service. |
 | `build/supervisor.py` | Starts and watches the controller and IPsec daemon; records faults and delays repeated restarts. |
@@ -63,11 +170,13 @@ thresholds and ordered paths. `deployment.json` defines the Docker application
 subnet and optional inbound TCP publication. `publication: null` disables it.
 If enabled, provide `address`, `port`, and `tunnel_port`; return traffic is marked
 so it follows the incoming tunnel. `peers.json` contains router endpoints,
-WireGuard public keys and ports. `swan-client.conf` contains IPsec identities,
-matching proposals, traffic selectors and unique PSKs. Keep it private.
-If you change the internal prefix, also update the IPsec remote selectors.
+WireGuard public keys and ports. Legacy file mode uses `swan-client.conf` for
+IPsec identities, matching proposals, traffic selectors and unique PSKs. Keep it private.
+In the new `generated` IPsec mode, selectors follow controller settings and PSKs
+come from private `ipsec-a.key` / `ipsec-b.key` files. See the full
+[configuration guide](CONFIGURATION.md) for fields, compatibility and checks.
 
-This release deliberately reserves a fixed tunnel layout:
+The example reserves the following layout; schema version 2 makes it configurable:
 
 | Path | Interface | Client address | Routing table | XFRM ID |
 | --- | --- | --- | --- | --- |
@@ -81,7 +190,8 @@ router listener in the examples is UDP 51889; clients listen on 52101/52102.
 Reserve rule priorities 12201–12204, optional mark rules 12101–12104, marks
 0x5c01–0x5c04 and route protocol 186. Do not share these IDs/interfaces/tables
 with another VPN controller or IPsec daemon in the same host network namespace.
-Changing the fixed layout requires coordinated code and router changes.
+Changing the layout requires matching gateway changes and a reviewed migration
+of any old reserved host resources. It does not require Python edits.
 
 The host needs Docker's iptables `DOCKER-USER` chain, IPv4 forwarding, Linux
 WireGuard and XFRM interface support. Review reverse-path filtering and host
@@ -132,8 +242,13 @@ Uptime Kuma reporting is optional and runs separately. Copy the example to a
 private `kuma.json`, provide four push tokens, then run `kuma_push.py --config`
 with that file from a trusted scheduler with read access to runtime status.
 `--dry-run` prints classifications without sending heartbeats. The reporter's
-current debounce is eight rounds and its messages assume three targets; update
-that reporter if changing those controller defaults.
+debounce and target counts come from controller status. Update monitoring token
+mapping keys if you rename paths.
+
+Automated GitHub checks run unit tests and build the image using read-only
+repository permissions. They have no deployment job or infrastructure credentials.
+Longer isolated observation is available with `--soak-seconds 86400`; it must finish
+successfully before its outcome is reported. Real RouterOS validation is separate.
 
 See [strongSwan configuration documentation](https://docs.strongswan.org/docs/latest/swanctl/swanctlConf.html)
 for the IPsec example fields. Actual router identities and proposals must match

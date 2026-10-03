@@ -1,6 +1,8 @@
 """Single-owner supervision with bounded liveness checks and restart backoff."""
 import pathlib,json,subprocess as s,os,time,signal,fcntl,re
 from eventlog import write_event
+import guard
+from configuration import status_max_age
 os.umask(0o077)
 R=pathlib.Path('/run/vpn-router');R.mkdir(exist_ok=True)
 owner=open(R/'supervisor.lock','w')
@@ -23,11 +25,12 @@ def write_watchdog(controller,ike,integrity,detail=''):
  d={'time':time.time(),'monotonic':time.monotonic(),'controller':controller,'ike':ike,'integrity':integrity,'detail':detail}
  p=R/'watchdog.tmp';p.write_text(json.dumps(d));p.replace(R/'watchdog.json')
 try:
- execute(['python3','/app/guard.py','--preflight'])
+ execute(['python3','/app/doctor.py'])
+ cfg,_=guard.validate_files();max_age=status_max_age(cfg)
  baseline=execute(['ip','route','show','default'])
  execute(['python3','/app/setup.py'])
  orphan_cleanup=json.loads(execute(['python3','/app/cleanup_ipsec.py']))
- pending_recovery={'ipsec-main':'primary','ipsec-secondary':'secondary'} if orphan_cleanup['owned_orphan_objects_removed'] else {}
+ pending_recovery={p['name']:p['connection'] for p in cfg['paths'] if p['kind']=='ipsec'} if orphan_cleanup['owned_orphan_objects_removed'] else {}
  log('orphan-cleanup',removed=orphan_cleanup['owned_orphan_objects_removed'])
  execute(['python3','/app/guard.py'],30)
  if execute(['ip','route','show','default'])!=baseline:raise RuntimeError('Public default changed during setup')
@@ -36,7 +39,7 @@ try:
  while not live_ike():
   if ike.poll() is not None or time.monotonic()-started>15:raise RuntimeError('IPsec control daemon unavailable at startup')
   time.sleep(.2)
- execute(['swanctl','--load-all','--noprompt','--file','/etc/vpn/swan-client.conf','--uri','unix:///run/vpn-router/charon.vici'])
+ execute(['swanctl','--load-all','--noprompt','--file',('/run/vpn-router/swan-client.conf' if cfg['ipsec_mode']=='generated' else '/etc/vpn/swan-client.conf'),'--uri','unix:///run/vpn-router/charon.vici'])
  children.append(s.Popen(['python3','-u','/app/controller.py']))
  start=time.monotonic();next_check=0;next_integrity=0;ike_bad=0;integrity=True;last_detail=''
  log('supervisor-start',public_default_preserved=True)
@@ -45,10 +48,10 @@ try:
   now=time.monotonic()
   if now>=next_check:
    try:
-    state=json.loads((R/'status.json').read_text());heartbeat=float(state['monotonic']);read_now=time.monotonic();controller=start<=heartbeat<=read_now and read_now-heartbeat<15
+    state=json.loads((R/'status.json').read_text());heartbeat=float(state['monotonic']);read_now=time.monotonic();controller=start<=heartbeat<=read_now and read_now-heartbeat<max_age
    except (OSError,ValueError,KeyError,TypeError):controller=False
    ike_ok=live_ike();ike_bad=0 if ike_ok else ike_bad+1
-   if now-start>20 and not controller:raise RuntimeError('Controller heartbeat stalled')
+   if now-start>max(20,max_age) and not controller:raise RuntimeError('Controller heartbeat stalled')
    if ike_bad>=3:raise RuntimeError('IPsec control daemon unresponsive on three checks')
    if now>=next_integrity:
     try:

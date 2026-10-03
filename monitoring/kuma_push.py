@@ -5,23 +5,26 @@ NAMES=('wg-main','wg-secondary','ipsec-main','ipsec-secondary')
 LABELS=('WG-main','WG-secondary','IPsec-main','IPsec-secondary')
 def classify(v,w,now):
  result={}
- for i,name in enumerate(NAMES):
+ paths=v.get('paths') or [{'name':n,'kind':'wireguard' if n.startswith('wg-') else 'ipsec'} for n in NAMES]
+ names=[p['name'] for p in paths];threshold=v.get('settings',{}).get('failure_rounds',8)
+ for i,p in enumerate(paths):
+  name=p['name'];label=name
   try:
-   if not 0<=now-float(v['monotonic'])<=20:raise ValueError('controller status stale')
+   if not 0<=now-float(v['monotonic'])<=v.get('status_max_age',20):raise ValueError('controller status stale')
    if not 0<=now-float(w['monotonic'])<=20:raise ValueError('watchdog status stale')
    if not w['controller']:raise ValueError('controller unavailable')
    if not w['integrity']:raise ValueError('VPN integrity check failed')
-   if name.startswith('ipsec-') and not w['ike']:raise ValueError('IPsec daemon unavailable')
+   if p['kind']=='ipsec' and not w['ike']:raise ValueError('IPsec daemon unavailable')
    healthy=v['healthy'][name];bad=v['failure_rounds'][i]
    if type(healthy) is not bool or type(bad) is not int or bad<0:raise ValueError('invalid health fields')
    probes=v['probes'][name];count=sum(p is True for p in probes.values());active=v['active']
-   if active not in NAMES and active is not None:raise ValueError('invalid active path')
-   if not healthy and bad>=8:
-    result[name]=('down',f'{LABELS[i]} unavailable | {bad} failed rounds | targets {count}/3 | selected {active or "none"}')
+   if active not in names and active is not None:raise ValueError('invalid active path')
+   if not healthy and bad>=threshold:
+    result[name]=('down',f'{label} unavailable | {bad} failed rounds | targets {count}/{len(probes)} | selected {active or "none"}')
    else:
-    role='ACTIVE' if active==name else 'STANDBY';detail='available' if healthy else f'transient probe loss ({bad}/8 failed rounds)'
-    result[name]=('up',f'{LABELS[i]} {role} | {detail} | targets {count}/3 | selected {active or "none"}')
-  except (KeyError,TypeError,ValueError,IndexError) as e:result[name]=('down',f'{LABELS[i]} monitoring invalid: {str(e)[:100]}')
+    role='ACTIVE' if active==name else 'STANDBY';detail='available' if healthy else f'transient probe loss ({bad}/{threshold} failed rounds)'
+    result[name]=('up',f'{label} {role} | {detail} | targets {count}/{len(probes)} | selected {active or "none"}')
+  except (KeyError,TypeError,ValueError,IndexError) as e:result[name]=('down',f'{label} monitoring invalid: {str(e)[:100]}')
  return result
 def push(base,token,status,msg):
  parsed=urllib.parse.urlsplit(base)
@@ -41,10 +44,11 @@ def main():
  except (OSError,ValueError):v={};w={}
  results=classify(v,w,time.monotonic())
  if a.dry_run:print(json.dumps(results));return
- config=json.loads(pathlib.Path(a.config).read_text());assert set(config['tokens'])==set(NAMES)
+ config=json.loads(pathlib.Path(a.config).read_text())
+ if set(config['tokens'])!=set(results):raise ValueError('Monitoring token mapping must match runtime path names')
  failed=False
  with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-  jobs={n:pool.submit(push,config['base_url'],config['tokens'][n],*results[n]) for n in NAMES}
+  jobs={n:pool.submit(push,config['base_url'],config['tokens'][n],*results[n]) for n in results}
   for n,job in jobs.items():
    try:job.result();print(f'{n}: delivered {results[n][0]} | {results[n][1]}',flush=True)
    except Exception as e:failed=True;print(f'{n}: heartbeat delivery failed ({type(e).__name__}); Kuma will expire the heartbeat',flush=True)
