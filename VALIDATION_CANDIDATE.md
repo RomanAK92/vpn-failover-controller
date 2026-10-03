@@ -42,12 +42,37 @@ so the exact cause cannot be established retrospectively. Current tunnel health
 and application connectivity passed subsequent checks; that does not erase the
 failed observation or establish continuous stability.
 
-A new read-only 12-hour observation of both existing isolated topologies started
-on 2026-10-02 at 20:31 UTC without restarting their VPN containers. It records
-individual failing checks, return codes and error output, transient probe results
-and up to three command attempts with one-second retry delays. Any retries must
-be disclosed in the final results. Its result is **pending**. The original logs
-and failure evidence are retained; no 24-hour pass is claimed.
+A new read-only 12-hour observation of both existing isolated topologies ran
+from 2026-10-02 20:31 UTC to 2026-10-03 08:31 UTC without restarting their VPN
+containers. It passed after 43,200 seconds and 4,081 rounds, with exit code 0.
+The observer recorded individual failing checks, return codes and error output,
+transient probe results and up to three command attempts with one-second retry
+delays. One mixed-topology application ping lost its single packet; the next
+attempt succeeded. No other observer retries or sampled unhealthy states were
+recorded. This is not a zero-packet-loss result or a 24-hour pass.
+
+The controller's own logs recorded eight brief mixed-topology probe warnings,
+including standby IPsec and main-gateway checks. They recovered without moving
+the selected route. The observer samples less frequently than the controller,
+so its healthy samples do not imply that every controller probe succeeded.
+The main WireGuard path remained selected; no sustained path failure, container
+OOM or host default-route change was found. Application TCP/SNAT/MSS checks on
+the Linux topology and application ping on the mixed topology continued to pass,
+apart from the single retried ping above.
+
+Daemon logs independently confirmed repeated natural IKE renewals for both
+IPsec peers in both topologies, with three explicit successful IKE rekey records
+per peer in the retained observation logs. Successful CHILD SA replacements were
+also recorded. Raw daemon output is buffered and can contain interleaved lines;
+Docker timestamps are not a precise event chronology for all daemon messages.
+SA-change counters were not treated as sufficient rekey proof by themselves.
+
+All seven disposable test containers, four test networks, two test image tags,
+generated credential/runtime directories and 24 owned RouterOS test objects were
+removed after evidence was saved. No owned RouterOS test objects remained, and
+the retained original router-object fields matched before and after cleanup.
+The existing test-host application remained running and its default route was
+unchanged. Original failure logs and final evidence remain outside Git.
 
 A completed functional suite does not establish overnight stability or successful
 natural IPsec rekeys. The final executable candidate revision passed the
@@ -58,9 +83,12 @@ GitHub Actions passed unit tests on Python 3.10, 3.12 and 3.13 and built/tested
 the image on the candidate branch and pull request. New revisions still require
 their own successful checks.
 
-Do not label v0.2.0 stable or fully validated until the final revision's checks, hosted CI
-and observation results have been reviewed. Remove disposable test resources
-and confirm the existing test-host application/router configuration remain intact.
+The requested 12-hour observation and scoped cleanup are complete. The candidate
+is ready for release review with the limits and initial failed observation above
+disclosed. The draft pull request remains unmerged, and no stable release or
+production upgrade was performed by the observation follow-up. The immutable
+v0.2.0-rc.1 source archive retains its original pending-observation report;
+this branch contains the subsequent results.
 
 ## Limits
 
