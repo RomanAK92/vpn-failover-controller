@@ -37,6 +37,15 @@ def project(status, watchdog):
     if len(set(names)) != len(names):
         raise ValueError('Duplicate paths')
     settings = status['settings']
+    if not isinstance(settings, dict):
+        raise ValueError('Invalid settings')
+    for key in ('probes', 'healthy'):
+        if not isinstance(status.get(key, {}), dict):
+            raise ValueError('Invalid telemetry mapping')
+    for key in ('failure_rounds', 'recovery_rounds'):
+        values = status.get(key, [0]*4)
+        if not isinstance(values, list) or len(values) < len(paths):
+            raise ValueError('Invalid telemetry counters')
     result = {
         'monotonic': number(status['monotonic']),
         'status_max_age': min(120, max(1, number(status.get('status_max_age'), 15))),
