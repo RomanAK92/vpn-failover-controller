@@ -25,6 +25,7 @@ def write_watchdog(controller,ike,integrity,detail=''):
  d={'time':time.time(),'monotonic':time.monotonic(),'controller':controller,'ike':ike,'ike_required':ike_required,'integrity':integrity,'detail':detail}
  p=R/'watchdog.tmp';p.write_text(json.dumps(d));p.replace(R/'watchdog.json')
 try:
+ write_watchdog(False,False,False,'Supervisor starting; readiness not established')
  execute(['python3','/app/doctor.py'])
  cfg,_=guard.validate_files();max_age=status_max_age(cfg)
  ike_required=any(p['kind']=='ipsec' for p in cfg['paths'])
@@ -87,6 +88,8 @@ except Exception as e:
  if isinstance(e,s.CalledProcessError):failure='Startup or local control command failed; no command output logged'
  log('supervisor-fault',detail=failure);write_watchdog(False,False,False,failure)
 finally:
+ try:write_watchdog(False,False,False,failure or 'Supervisor stopping')
+ except OSError:pass  # Terminate children even if the runtime filesystem fails.
  for p in reversed(children):
   if p.poll() is None:p.terminate()
  for p in children:
