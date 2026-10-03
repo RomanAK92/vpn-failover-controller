@@ -27,7 +27,8 @@ def normalize(config):
     integer(c.get('schema_version',1),1,2,'schema_version')
     net=private_prefix(c.get('subnet',''),'Managed subnet')
     paths=c.get('paths')
-    if not isinstance(paths,list) or len(paths)!=4:raise ValueError('Exactly four paths are required')
+    if not isinstance(paths,list) or not 1<=len(paths)<=4:raise ValueError('One to four paths are required')
+    if c.get('schema_version',1)==1 and len(paths)!=4:raise ValueError('Legacy configuration requires four paths; use schema_version 2')
     for index,p in enumerate(paths):
         if not isinstance(p,dict):raise ValueError('Path must be an object')
         name=p.get('name','')
@@ -63,10 +64,10 @@ def normalize(config):
         else:
             integer(p.get('if_id'),1,0xffffffff,name+'.if_id')
             if not re.fullmatch(r'[a-z][a-z0-9_-]{0,39}',p.get('connection','')):raise ValueError('Invalid IPsec connection name')
-    if sorted(p['kind'] for p in paths)!=['ipsec','ipsec','wireguard','wireguard']:raise ValueError('Two WireGuard and two IPsec paths required')
+    if c.get('schema_version',1)==1 and sorted(p['kind'] for p in paths)!=['ipsec','ipsec','wireguard','wireguard']:raise ValueError('Legacy configuration requires two WireGuard and two IPsec paths')
     for key in ('name','interface','source','table','priority','mark_priority','mark'):
-        if len({p[key] for p in paths})!=4:raise ValueError('Duplicate path '+key)
-    if len({p[k] for p in paths for k in ('priority','mark_priority')})!=8:raise ValueError('Overlapping rule priorities')
+        if len({p[key] for p in paths})!=len(paths):raise ValueError('Duplicate path '+key)
+    if len({p[k] for p in paths for k in ('priority','mark_priority')})!=2*len(paths):raise ValueError('Overlapping rule priorities')
     for key,kind in [('listen_port','wireguard'),('if_id','ipsec'),('connection','ipsec')]:
         values=[p[key] for p in paths if p['kind']==kind]
         if len(set(values))!=len(values):raise ValueError('Duplicate '+key)
@@ -90,7 +91,8 @@ def validate_peers(c,meta):
     for peer in used:
         m=meta[peer];ip=ipaddress.IPv4Address(m['endpoint'])
         if ip.is_unspecified or ip.is_multicast or ip.is_loopback:raise ValueError('Invalid peer endpoint')
-        integer(m.get('port',51889),1,65535,'WireGuard endpoint port')
+        if any(p['kind']=='wireguard' and p['peer']==peer for p in c['paths']):
+            integer(m.get('port',51889),1,65535,'WireGuard endpoint port')
         if c['ipsec_mode']=='generated' and any(p['kind']=='ipsec' and p['peer']==peer for p in c['paths']):
             for field in ('local_id','remote_id'):
                 if not re.fullmatch(r'[A-Za-z0-9@._-]{1,128}',m.get(field,'')):raise ValueError('Invalid IPsec identity')
