@@ -49,6 +49,14 @@ http {{
       proxy_connect_timeout 3s;
       proxy_read_timeout 10s;
     }}
+    location = /api/drafts {{
+      client_max_body_size 64k;
+      proxy_pass http://127.0.0.1:{backend_port};
+      proxy_set_header Host $http_host;
+      proxy_set_header X-Forwarded-For "";
+      proxy_connect_timeout 3s;
+      proxy_read_timeout 20s;
+    }}
     location / {{
       proxy_pass http://127.0.0.1:{backend_port};
       proxy_set_header Host $http_host;
