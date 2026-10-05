@@ -9,6 +9,9 @@ import pathlib
 import re
 import threading
 import time
+import sys
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
+from history import History, MAX_AGE
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = pathlib.Path(__file__).parent
@@ -96,16 +99,35 @@ def read_json(path):
 
 
 class Monitor:
-    def __init__(self, directory):
+    def __init__(self, directory, history_directory=None):
         self.directory = pathlib.Path(directory)
         self.events = collections.deque(maxlen=200)
         self.previous = None
         self.switch_time = None
         self.lock = threading.Lock()
+        self.history = History(history_directory) if history_directory else None
+        self.history_warning = None
+        if self.history:
+            try:
+                events, self.switch_time = self.history.load()
+                self.events.extend(events)
+            except (OSError, ValueError, KeyError, TypeError):
+                self.history_warning = 'Saved history could not be loaded. Current monitoring is independent.'
+
+    def persist(self, before):
+        cutoff = time.time() - MAX_AGE
+        self.events = collections.deque((e for e in self.events if e['time'] >= cutoff), maxlen=200)
+        if self.history and (before != list(self.events) or self.history_warning):
+            try:
+                self.history.save(self.events, self.switch_time)
+                self.history_warning = None
+            except (OSError, ValueError, TypeError):
+                self.history_warning = 'History could not be saved. Current monitoring still works.'
 
     def snapshot(self, now=None):
         now = time.monotonic() if now is None else now
         with self.lock:
+            before = list(self.events)
             try:
                 raw = read_json(self.directory / 'telemetry.json')
                 state = project(raw, raw['watchdog'])
@@ -129,11 +151,14 @@ class Monitor:
                 if switch and switch['time'] != self.switch_time:
                     self.events.append({'time': switch['time'], 'path': switch['new'], 'message': 'Route changed: ' + (switch['old'] or 'none') + ' → ' + (switch['new'] or 'none') + '. ' + switch['reason'] + '.'})
                     self.switch_time = switch['time']
+                self.persist(before)
+                state['history_warning'] = self.history_warning
                 state['events'] = list(reversed(self.events))
                 return state
             except (OSError, ValueError, KeyError, TypeError, IndexError):
                 self.previous = None
-                return {'available': False, 'active': None, 'paths': [], 'events': list(reversed(self.events)), 'message': 'No valid telemetry available. Check the optional status mirror.'}
+                self.persist(before)
+                return {'available': False, 'active': None, 'paths': [], 'events': list(reversed(self.events)), 'history_warning': self.history_warning, 'message': 'No valid telemetry available. Check the optional status mirror.'}
 
 
 def check_binding(address, token):
@@ -150,7 +175,7 @@ def check_binding(address, token):
 def serve(args):
     token = pathlib.Path(args.token_file).read_text().strip() if args.token_file else ''
     check_binding(args.bind, token)
-    monitor = Monitor(args.telemetry)
+    monitor = Monitor(args.telemetry, getattr(args, 'history', None))
     def sample():
         while True:
             monitor.snapshot()
@@ -197,4 +222,5 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=8787)
     parser.add_argument('--telemetry', default='/telemetry')
     parser.add_argument('--token-file')
+    parser.add_argument('--history', help='Optional writable directory for up to 200 observations, retained 30 days')
     serve(parser.parse_args())
