@@ -17,6 +17,14 @@ profile packages without applying them. The current development branch adds
 preview-first installation, automatic mirror/dashboard startup and persistent
 history. See the dashboard guide for the exact setup and limits.
 
+**Management development (not a stable release):** the `secure-management` branch
+adds individual administrator/viewer accounts, an optional private HTTPS proxy,
+[guided system preparation](management/README.md) and private configuration drafts
+validated by the actual VPN engine. Saving drafts does not apply them. The
+[full-system roadmap](MANAGEMENT_ROADMAP.md) and
+[management validation](management/VALIDATION.md) describe the remaining live
+apply/rollback, recovery and release gates. Existing published tags are unchanged.
+
 **v0.3.0:** adds one to four tunnels in any WireGuard/IPsec combination
 and fixes restart readiness so saved status alone cannot report a stopped
 controller as healthy. Start with the [plain-language two-WireGuard guide](QUICKSTART.md).
