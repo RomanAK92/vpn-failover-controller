@@ -32,7 +32,7 @@ To create a viewer, run the same interactive account command with
 `--username observer --role viewer`. To reset an account, stop the service first,
 then run the command with `--replace`; all that user's sessions are revoked.
 No administrator credentials are generated or embedded by this project.
-Account lifecycle web forms are a later part of this milestone.
+Administrators can also create/reset accounts from the Accounts and security panel. The current administrator passphrase is required; resetting your own account signs you out. The last administrator cannot be demoted to viewer.
 
 ## HTTPS boundary
 
@@ -40,8 +40,39 @@ For shared access, use a trusted HTTPS reverse proxy and set DASHBOARD_ORIGIN to
 its exact origin (for example https://vpn.example.org). Preserve the Host header,
 forward to the loopback backend, enforce body/request limits, and restrict access
 through the host firewall/VPN. Do not publish the HTTP backend to WAN.
-TLS certificate automation and a packaged proxy are not yet implemented or tested
-in this milestone. Do not expose this development service publicly.
+An optional restricted Nginx ingress is supplied in compose.https.yaml. It requires
+an existing trusted certificate; certificate issuance/renewal automation is not
+implemented. It binds only to a specific private or loopback IPv4 address on an
+unprivileged port (default example 8443). Do not expose this development service publicly.
+
+Prepare a private nginx.conf without changing networking:
+
+```sh
+python3 tls_proxy.py --origin https://vpn.example.org:8443 --bind 10.250.1.2 > /your/private/nginx.conf
+```
+
+Set DASHBOARD_ORIGIN to the same exact HTTPS origin. Set HTTPS_CONFIG and
+TLS_DIRECTORY to absolute private paths. The certificate directory must contain
+fullchain.pem and privkey.pem, readable by proxy UID101; keep its private key
+mode0600 and directory0700. Do not put certificates/keys in this repository.
+Set NGINX_IMAGE to the reviewed immutable vendor image digest. The isolated test used:
+
+```text
+nginxinc/nginx-unprivileged@sha256:15c994d10d6d78658721c3bcafff14cb281fba2a4bdf9d5ba92c416a472516e3
+```
+
+Review image updates separately. Check DNS/certificate names and VPN/firewall
+restrictions before starting the optional two-file deployment:
+
+```sh
+docker compose -f compose.accounts.yaml -f compose.https.yaml config
+docker compose -f compose.accounts.yaml -f compose.https.yaml up -d
+```
+
+The proxy is a separate non-root service with read-only root, no capabilities,
+bounded tmpfs/cache, bounded request sizes/timeouts and login rate limiting.
+It does not obtain certificates or modify firewall rules. HTTPS acceptance used a
+disposable certificate explicitly trusted by the test client, not disabled verification.
 
 The service does not trust X-Forwarded-For: behind a proxy all clients share the
 proxy's IP limit until an explicit trusted-proxy design is tested. Proxy headers
