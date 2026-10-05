@@ -1,12 +1,14 @@
 'use strict';
 const AccountsUI = (() => {
-  let mode = 'local', user = null, lastActivity = 0;
+  let mode = 'local', user = null, lastActivity = 0, draftsEnabled = false;
   const element = id => document.getElementById(id);
   function render(message = '') {
     element('accountPanel').hidden = mode !== 'accounts' && mode !== 'unavailable';
     element('loginFields').hidden = !!user;
     element('signOut').hidden = !user;
     element('usersPanel').hidden = !user || user.role !== 'admin';
+    if(element('draftPanel'))element('draftPanel').hidden = !draftsEnabled || !user || user.role !== 'admin';
+    if(!user&&element('draftList'))element('draftList').textContent='';
     if(!user){element('usersList').textContent='';element('securityEvents').textContent='';element('newPassword').value='';element('currentPassword').value='';}
     element('accountStatus').textContent = message || (user ? 'Signed in as '+user.username+' ('+user.role+').' : 'Sign in to view this server.');
     document.querySelector('.unlock').hidden = mode === 'accounts';
@@ -21,7 +23,7 @@ const AccountsUI = (() => {
     try {
       const info = await fetch('/api/auth',{cache:'no-store'});
       if (!info.ok) throw new Error();
-      mode = (await info.json()).mode;
+      const features = await info.json(); mode = features.mode; draftsEnabled = features.drafts === true;
       if (mode === 'accounts') {
         const response = await fetch('/api/session',{credentials:'same-origin',cache:'no-store'});
         if (response.ok) user = await response.json();
@@ -66,5 +68,9 @@ const AccountsUI = (() => {
   }
   document.addEventListener('pointerdown',activity);
   document.addEventListener('keydown',activity);
-  return {ready,canRead:()=>mode!=='accounts'&&mode!=='unavailable'||!!user,expired:()=>{user=null;render('Session expired. Sign in again.');}};
+  return {ready,canRead:()=>mode!=='accounts'&&mode!=='unavailable'||!!user,
+    canManageDrafts:()=>draftsEnabled&&!!user&&user.role==='admin',
+    saveDraft:async(files,label)=>{if(!draftsEnabled||!user||user.role!=='admin')throw new Error('Sign in as administrator on a draft-enabled installation.');return request('/api/drafts',{files,label});},
+    listDrafts:async()=>{if(!draftsEnabled||!user||user.role!=='admin')throw new Error('Administrator access required.');const response=await fetch('/api/drafts',{credentials:'same-origin',cache:'no-store'});if(!response.ok)throw new Error('Draft list unavailable.');return response.json();},
+    expired:()=>{user=null;render('Session expired. Sign in again.');element('clear').click();}};
 })();
