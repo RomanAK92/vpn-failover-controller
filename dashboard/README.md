@@ -1,12 +1,14 @@
 # Optional dashboard and local profile preparation
 
-This development feature is separate from stable v0.3.0. It does not install,
-upgrade or change a running VPN. Try it on a separate Linux test host first.
+The optional dashboard was first released in v0.4.0. This follow-up adds an
+installer and persistent history. It does not upgrade or change a running VPN.
+Try it on a separate Linux test host first.
 
 The **Connection overview** shows which road carries office traffic, whether
 standby roads answer the configured probes, and recovery/failure waiting rounds.
 Stale status is clearly unavailable. Readable events and switching history are
-bounded to 200 entries in memory since the dashboard starts. A sampler checks
+bounded to 200 entries, retained for at most 30 days. With the optional writable
+history directory, these survive dashboard/container restarts. A sampler checks
 every two seconds, so it may miss transitions between samples. Events are
 observations from status, not complete raw WireGuard/strongSwan daemon logs.
 Use the controller's Docker logs for daemon-level investigations and rekeys.
@@ -31,6 +33,56 @@ ports, overlapping networks and credentials are validated before export.
 The browser cannot verify gateway configuration or actual network reachability.
 
 ## Run it on a separate Linux test host
+
+### Simple installation with automatic startup
+
+Requires Linux with systemd, Python 3 and Docker with the Compose plugin already
+installed. Your VPN must already work; this does not create tunnels or router
+peers. Download the source on your **test host** and open its repository folder.
+
+First preview the two services and Compose settings without changing anything:
+
+```sh
+python3 dashboard/install.py
+```
+
+Then install the optional dashboard and enable it for startup:
+
+```sh
+sudo python3 dashboard/install.py --apply
+```
+
+This creates `/opt/vpn-dashboard` (dashboard files), `/var/lib/vpn-dashboard`
+(private history) and two units: `vpn-dashboard.service` and
+`vpn-dashboard-mirror.service`. The mirror reads `/run/vpn-router`; use
+`--vpn-runtime /your/runtime/path` with both commands if yours differs.
+The dashboard listens only on **127.0.0.1:8787**. No firewall port is opened.
+Existing units, occupied directories or an existing dashboard deployment are
+rejected before writing files. Repeating the same installation is supported;
+replacing a different version requires a separate reviewed upgrade procedure.
+If Docker building fails, files may remain but services are not enabled; correct
+the Docker problem and repeat the identical command. Installation requires root
+to manage Docker/systemd, while the dashboard runs as UID 65532 without added
+capabilities. The mirror has a private network namespace and read-only system
+filesystem, except its sanitized output directory.
+
+Check it, then use the SSH access instructions below:
+
+```sh
+systemctl status vpn-dashboard.service vpn-dashboard-mirror.service
+```
+
+To stop only the dashboard and mirror and disable automatic startup:
+
+```sh
+sudo systemctl disable --now vpn-dashboard.service vpn-dashboard-mirror.service
+```
+
+This preserves history and leaves the VPN running. Unit diagnostics are available
+with `journalctl -u vpn-dashboard.service -u vpn-dashboard-mirror.service`.
+Never publish these diagnostics without checking for private environment details.
+
+### Manual installation
 
 First make sure the existing VPN's status.json and watchdog.json are present.
 The dashboard itself must NOT mount /run/vpn-router: that directory can contain
@@ -74,14 +126,15 @@ sudo chown 65532:65532 dashboard-token
 sudo chmod 0400 dashboard-token
 ```
 
-Use the absolute path of that file in the read-only mount, and override the
+For the manual Compose setup, use the absolute path of that file in the read-only mount, and override the
 service command:
 
 ```yaml
-command: [python3, server.py, --bind, 10.250.1.2, --token-file, /auth/token]
+command: [python3, server.py, --bind, 10.250.1.2, --token-file, /auth/token, --history, /history]
 volumes:
   - /run/vpn-dashboard:/telemetry:ro
   - /your/private/dashboard-token:/auth/token:ro
+  - dashboard-history:/history:rw
 ```
 
 Replace the example address with an address actually owned by the host, and
@@ -98,17 +151,23 @@ only in page memory, not localStorage, URLs or diagnostics. Tokens are sent
 only to this dashboard's own status endpoint, never third-party services.
 
 The service runs as UID65532, drops all capabilities, uses a read-only image
-and sanitized read-only telemetry mount. It has no Docker socket, VPN keys,
+and sanitized read-only telemetry mount. Its only writable data mount is the
+separate history directory; it stores allowlisted observations, not raw status
+or credentials. It has no Docker socket, VPN keys,
 IPsec control socket or configuration mount. Profile credentials never leave
 the browser, except through your explicit private download. No analytics or
 external scripts are used. Use a trusted device/browser; downloaded credential
 files still exist after clearing the page. Configuration changes are not live.
 
-The mirror and memory history stop when their processes stop. They are not
-installed as boot services by these instructions. Stop the optional dashboard
+The manual mirror stops when its process stops. The manual Compose service
+restarts with Docker, but use the installer above to manage both at startup.
+The named `dashboard-history` volume keeps up to 200 observations across
+restarts, with a maximum age of 30 days. `down` preserves this volume; `down -v`
+deletes it. History is sampled monitoring data, not a complete audit trail.
+If saving history fails, the page reports it and current monitoring continues.
+Stop the optional manual dashboard
 with `docker compose -f dashboard/compose.yaml down` and stop the mirror with
-Ctrl+C. This leaves the VPN untouched. A boot-time mirror installer and
-persistent history are future work, not silently enabled here.
+Ctrl+C. This leaves the VPN untouched. Do not mix manual and systemd installations.
 
 ## Checks
 
