@@ -23,7 +23,7 @@ from deploying the system on a critical host.
    persistent attempt blocking, hashed session identifiers, idle/absolute expiry,
    CSRF and origin checks, Host validation, sanitized bounded security events.
    Current implementation is under test on branch secure-management; not released.
-   HTTPS ingress, browser acceptance and account lifecycle UI are required to finish.
+   HTTPS ingress and administrator account lifecycle UI are implemented with isolated acceptance. Actual browser acceptance and combined bootstrap/reboot/upgrade checks remain before release.
 3. Guided installation: supported-host checks, first-start account creation,
    one Compose distribution, explicit SSH/VPN/HTTPS access selection and recovery.
 4. Configuration management: locally import supported profiles, validate through
