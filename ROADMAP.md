@@ -11,7 +11,7 @@ Four hours is the chosen observation window, not a twelve-hour certification.
 Only after all checks and final CI/review pass should PR2 merge and v0.3.0
 be published. Production upgrades remain separate from GitHub publication.
 
-## Next: a read-only web dashboard
+## Released in v0.4.0: a read-only web dashboard
 
 Show the active road, healthy standby roads, unreachable roads and the reason
 for the latest switch. Explain probe results and recovery waiting time in plain
@@ -23,7 +23,7 @@ not require the Docker socket, network-administration privileges or permission
 to change VPN configuration. Default to loopback, with explicit private/VPN
 binding and authentication for remote access. Do not expose it to the public WAN.
 
-## Guided configuration and profile import
+## Released in v0.4.0: guided configuration and profile import
 
 Let users choose one to four roads and put them in preference order. Import
 WireGuard profiles locally or enter IPsec IKEv2/shared-secret settings through
@@ -41,6 +41,17 @@ connectivity checks, clear recovery/rekey status and sanitized support reports.
 A later apply feature needs a private backup, a change preview, a health check
 and timed automatic rollback. Monitoring and applying changes remain separate.
 
-These dashboard/import features are planned work, not part of RC2.
+## Current follow-up: simpler installation and durable observations
+
+A preview-first installer creates only the optional dashboard and status-mirror
+services, enables startup, and uses loopback access through SSH. It rejects
+conflicting files/deployments and supports repeating the exact installation.
+The separate history mount preserves up to 200 observations for at most 30 days.
+Installation/restarts and encrypted integration must pass on an isolated VPS
+before this follow-up is released. It does not upgrade the VPN controller.
+
+Next work: a reviewed dashboard upgrade procedure; guided prerequisites and
+gateway checks; richer read-only diagnostics. Live apply remains a separate
+feature requiring a change preview, private backup and timed rollback.
 
 Prepared by **r.abdulkhalek**.

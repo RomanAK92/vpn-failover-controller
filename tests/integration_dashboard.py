@@ -4,6 +4,7 @@ import json, os, pathlib, secrets, subprocess, time
 def check(root, tag, names, temp, runtime, dx, run, state, wait_path, block, record, network_snapshot, http_from_app):
     image=tag+':dashboard';name=tag+'-dashboard';mirror=None
     directory=temp/'dashboard-telemetry';directory.mkdir(mode=0o755)
+    history=temp/'dashboard-history';history.mkdir(mode=0o700);os.chown(history,65532,65532)
     token_file=temp/'dashboard-token';token_file.write_text(secrets.token_hex(32));os.chown(token_file,65532,65532);token_file.chmod(0o400)
     def request(address, auth='valid', path='/api/status', origin='main'):
         code="""import pathlib, http.client, json
@@ -28,8 +29,8 @@ print(json.dumps({'status':r.status,'body':r.read().decode(),'csp':r.headers.get
     def start_dashboard(address):
         run('docker','run','-d','--name',name,'--network','container:'+names['vpn'],
             '--cap-drop','ALL','--security-opt','no-new-privileges:true','--read-only','--memory','128m','--pids-limit','64',
-            '-v',str(directory)+':/telemetry:ro','-v',str(token_file)+':/token:ro',image,'python3','server.py',
-            '--bind',address,'--token-file','/token')
+            '-v',str(directory)+':/telemetry:ro','-v',str(token_file)+':/token:ro','-v',str(history)+':/history:rw',image,'python3','server.py',
+            '--bind',address,'--token-file','/token','--history','/history')
     try:
         run('docker','build','-t',image,str(root/'dashboard'),timeout=600)
         run('docker','cp',str(token_file),names['main']+':/tmp/dashboard-test-token')
@@ -51,7 +52,7 @@ print(json.dumps({'status':r.status,'body':r.read().decode(),'csp':r.headers.get
         host=info['HostConfig']
         if info['Config']['User']!='65532:65532' or not host['ReadonlyRootfs'] or host['CapDrop']!=['ALL'] or host['CapAdd']:raise RuntimeError('Dashboard privilege boundary incorrect')
         mounts={p['Destination'] for p in info['Mounts']}
-        if mounts!={'/telemetry','/token'}:raise RuntimeError('Unexpected dashboard mount')
+        if mounts!={'/telemetry','/token','/history'}:raise RuntimeError('Unexpected dashboard mount')
         page=request('10.250.102.2',path='/');missing=request('10.250.102.2',path='/../server.py')
         if page['status']!=200 or 'frame-ancestors' not in page['csp'] or missing['status']!=404:raise RuntimeError('Static asset protection failed')
         if network_snapshot()!=before:raise RuntimeError('Dashboard start or reads changed VPN networking')
@@ -65,6 +66,9 @@ print(json.dumps({'status':r.status,'body':r.read().decode(),'csp':r.headers.get
         run('docker','rm','-f',name);start_dashboard('10.251.102.2');wait_dashboard('ipsec-main',address='10.251.102.2')
         row=request('10.251.102.2')
         if row['status']!=200 or json.loads(row['body'])['active']!='ipsec-main':raise RuntimeError('IPsec authenticated dashboard access failed')
+        if not any('Route changed' in e['message'] and 'wg-secondary' in e['message'] for e in json.loads(row['body'])['events']):raise RuntimeError('History lost across dashboard recreation')
+        if (history/'history.json').stat().st_mode & 0o777 != 0o600:raise RuntimeError('History permissions incorrect')
+        record('dashboard-persistent-history-survives-recreation')
         if 'peer-ipsec' not in dx('main','ip','route','get','10.251.102.2'):raise RuntimeError('IPsec dashboard request did not use VPN route')
         if request('10.251.102.2','none')['status']!=401:raise RuntimeError('IPsec access unprotected')
         record('dashboard-authenticated-live-ipsec')

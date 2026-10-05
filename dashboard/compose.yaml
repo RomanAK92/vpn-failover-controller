@@ -11,6 +11,9 @@ services:
     mem_limit: 128m
     volumes:
       - /run/vpn-dashboard:/telemetry:ro
+      - dashboard-history:/history:rw
     logging:
       driver: json-file
       options: {max-size: 5m, max-file: "2"}
+volumes:
+  dashboard-history:

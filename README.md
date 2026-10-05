@@ -11,6 +11,12 @@ private-network traffic to the secondary gateway. If WireGuard stops passing
 traffic, it can use IPsec instead. Once a preferred path is consistently healthy,
 it switches back automatically.
 
+**v0.4.0:** adds an optional [read-only dashboard and local profile preparation](dashboard/README.md).
+It shows selected/standby tunnels and switching observations, and exports reviewed
+profile packages without applying them. The current development branch adds
+preview-first installation, automatic mirror/dashboard startup and persistent
+history. See the dashboard guide for the exact setup and limits.
+
 **v0.3.0:** adds one to four tunnels in any WireGuard/IPsec combination
 and fixes restart readiness so saved status alone cannot report a stopped
 controller as healthy. Start with the [plain-language two-WireGuard guide](QUICKSTART.md).

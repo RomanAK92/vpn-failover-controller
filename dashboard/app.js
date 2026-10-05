@@ -11,6 +11,7 @@ function show(state){
   $('overall').textContent=available?(activeHealthy?'Private network connected':state.active?'Selected road probe failing':'No working road'):'Monitoring unavailable';
   $('overall').className='badge '+(activeHealthy?'good':'bad');
   $('statusMessage').textContent=state.message||(available?'Updated '+state.age_seconds+' seconds ago. Public internet uses its existing route.':'Status is stale or supervision failed. Showing last-known values only.');
+  if(state.history_warning)$('statusMessage').textContent+=' '+state.history_warning;
   $('roads').replaceChildren();
   for(const [i,p] of (state.paths||[]).entries()){
     const card=node('article',undefined,'road');card.append(node('small','PRIORITY '+(i+1)),node('h2',p.name));
