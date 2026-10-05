@@ -142,7 +142,8 @@ class AccountHTTPTests(unittest.TestCase):
             sock.bind(('127.0.0.1',0));cls.port=sock.getsockname()[1]
         cls.origin='http://127.0.0.1:'+str(cls.port)
         cls.log=open(pathlib.Path(cls.temp.name)/'http-test.log','w')
-        cls.process=subprocess.Popen([sys.executable,str(ROOT/'dashboard/server.py'),'--port',str(cls.port),'--auth-dir',cls.temp.name,'--origin',cls.origin,'--telemetry',cls.temp.name],stdout=cls.log,stderr=cls.log)
+        extra = cls.server_args(cls.temp.name) if hasattr(cls, 'server_args') else []
+        cls.process=subprocess.Popen([sys.executable,str(ROOT/'dashboard/server.py'),'--port',str(cls.port),'--auth-dir',cls.temp.name,'--origin',cls.origin,'--telemetry',cls.temp.name]+extra,stdout=cls.log,stderr=cls.log)
         for _ in range(100):
             try:
                 urllib.request.urlopen(cls.origin+'/api/auth',timeout=.2).close();break
