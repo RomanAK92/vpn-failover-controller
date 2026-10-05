@@ -1,0 +1,29 @@
+# Account-enabled monitoring. No live VPN management in this milestone.
+services:
+  vpn-dashboard:
+    build: .
+    network_mode: host
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    restart: unless-stopped
+    command: [python3, server.py, --bind, 127.0.0.1, --port, "8787", --auth-dir, /auth, --origin, "${DASHBOARD_ORIGIN:-http://127.0.0.1:8787}", --history, /history]
+    volumes:
+      - /run/vpn-dashboard:/telemetry:ro
+      - dashboard-history:/history:rw
+      - dashboard-accounts:/auth:rw
+    healthcheck:
+      test: [CMD, python3, -c, "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8787/api/auth',timeout=2))['mode']=='accounts'"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: "2"}
+volumes:
+  dashboard-history:
+  dashboard-accounts:
