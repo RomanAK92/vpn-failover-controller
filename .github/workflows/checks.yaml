@@ -27,6 +27,7 @@ jobs:
       - run: python -m compileall -q dashboard
       - run: node tests/test_profiles.cjs
       - run: node tests/test_dashboard_ui.cjs
+      - run: node tests/test_accounts_ui.cjs
   image:
     runs-on: ubuntu-latest
     timeout-minutes: 15
