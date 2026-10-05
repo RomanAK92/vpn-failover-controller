@@ -26,9 +26,17 @@ from deploying the system on a critical host.
    HTTPS ingress and administrator account lifecycle UI are implemented with isolated acceptance. Actual browser acceptance and combined bootstrap/reboot/upgrade checks remain before release.
 3. Guided installation: supported-host checks, first-start account creation,
    one Compose distribution, explicit SSH/VPN/HTTPS access selection and recovery.
+   Private staging, real files-only validation, first administrator and combined
+   engine/mirror/web preparation are implemented. Isolated account bootstrap and
+   recreation passed eleven checks; guided web/mirror/draft acceptance passed
+   fourteen. Guided distribution currently uses loopback + SSH. Engine startup,
+   combined host reboot, different-version upgrade and supported-host matrix remain.
 4. Configuration management: locally import supported profiles, validate through
    the actual controller validators, save private drafts, preview priorities and
    conflicts. No silent stripping of unsupported features.
+   Administrators can save reviewed structured profiles to private drafts; viewers
+   cannot save or list them. Scripts/raw IPsec/path traversal/unknown fields are
+   rejected and the actual engine validator checks every draft. No live apply.
 5. Transactional apply: compare a validated draft with the active configuration;
    back up the active generation; independently arm rollback before changes;
    apply through the broker; require fresh controller/application checks and
@@ -47,8 +55,9 @@ from deploying the system on a critical host.
 
 ## What is not yet implemented
 
-Account mode currently adds authenticated monitoring, not live administration.
-Do not claim the complete management system is ready while stages 3–9 are pending.
+Account mode currently adds authenticated monitoring, account administration and
+private drafts, not live VPN administration. Do not claim the complete system
+is ready while the remaining installation gates and stages 5–9 are pending.
 Legacy local/token dashboard mode remains for existing integrations; the new
 account-enabled Compose explicitly selects account mode and fails closed if its
 account storage is absent. It does not silently fall back to anonymous access.
