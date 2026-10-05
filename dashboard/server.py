@@ -12,6 +12,8 @@ import time
 import sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from history import History, MAX_AGE
+from accounts import Accounts, AuthError, origin_policy, cookie_token, cookie_header
+from urllib.parse import urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = pathlib.Path(__file__).parent
@@ -174,7 +176,19 @@ def check_binding(address, token):
 
 def serve(args):
     token = pathlib.Path(args.token_file).read_text().strip() if args.token_file else ''
-    check_binding(args.bind, token)
+    auth_dir = getattr(args, 'auth_dir', None)
+    origin = getattr(args, 'origin', None)
+    if auth_dir and (token or not origin):
+        raise ValueError('Account mode requires an origin and cannot use a legacy token.')
+    if origin and not auth_dir:
+        raise ValueError('An origin requires initialized account storage.')
+    secure = origin_policy(origin) if auth_dir else False
+    if auth_dir and not secure and not ipaddress.ip_address(args.bind).is_loopback:
+        raise ValueError('Plain HTTP account mode requires a loopback listener.')
+    check_binding(args.bind, 'account-mode-requires-origin-check' if auth_dir else token)
+    accounts = Accounts(auth_dir) if auth_dir else None
+    if accounts and not accounts.db.execute("SELECT 1 FROM users WHERE role='admin'").fetchone():
+        raise ValueError('Create an administrator before starting account mode.')
     monitor = Monitor(args.telemetry, getattr(args, 'history', None))
     def sample():
         while True:
@@ -186,7 +200,72 @@ def serve(args):
         def log_message(self, *_):
             pass  # Never record authorization headers or URLs.
 
+        def sid(self):
+            return cookie_token(self.headers.get('Cookie'), secure)
+
+        def verify_host(self):
+            if accounts and self.headers.get('Host', '') != urlsplit(origin).netloc:
+                raise AuthError(403, 'Unexpected dashboard host.')
+
+        def json_response(self, status, value, headers=None):
+            self.respond(status, json.dumps(value).encode(), 'application/json', headers)
+
+        def do_POST(self):
+            if not accounts:
+                self.respond(405, b'No live management endpoint', 'text/plain')
+                return
+            try:
+                self.verify_host()
+                if self.headers.get('Origin') != origin or self.headers.get('X-VPN-Request') != '1':
+                    raise AuthError(403, 'Request verification failed.')
+                if self.headers.get('Content-Type') != 'application/json' or self.headers.get('Transfer-Encoding'):
+                    raise AuthError(400, 'Use a bounded JSON request.')
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 1 <= length <= 4096:
+                    raise AuthError(413, 'Request too large or empty.')
+                data = json.loads(self.rfile.read(length))
+                if not isinstance(data, dict):
+                    raise ValueError()
+                if self.path == '/api/login':
+                    sid, user = accounts.login(data.get('username'), data.get('password'), self.client_address[0])
+                    self.json_response(200, user, {'Set-Cookie': cookie_header(sid, secure)})
+                elif self.path == '/api/activity':
+                    self.json_response(200, accounts.session(self.sid(), self.headers.get('X-CSRF-Token', '')))
+                elif self.path == '/api/logout':
+                    accounts.logout(self.sid(), self.headers.get('X-CSRF-Token', ''))
+                    self.json_response(200, {'logged_out': True}, {'Set-Cookie': cookie_header('', secure, clear=True)})
+                else:
+                    self.json_response(404, {'error': 'No such operation.'})
+            except AuthError as exc:
+                self.json_response(exc.status, {'error': exc.message})
+            except (ValueError, TypeError, UnicodeError):
+                self.json_response(400, {'error': 'Invalid request.'})
+            except Exception:
+                self.json_response(503, {'error': 'Authentication service unavailable.'})
+
         def do_GET(self):
+            if self.path == '/api/auth':
+                self.json_response(200, {'mode': 'accounts' if accounts else 'token' if token else 'local'})
+                return
+            if self.path.startswith('/api/') and accounts:
+                try:
+                    self.verify_host()
+                    user = accounts.session(self.sid(), touch=False)
+                    if self.path == '/api/session':
+                        self.json_response(200, user)
+                        return
+                    if self.path == '/api/security-events':
+                        self.json_response(200, {'events': accounts.events(self.sid())})
+                        return
+                    if self.path != '/api/status':
+                        self.json_response(404, {'error': 'No such operation.'})
+                        return
+                except AuthError as exc:
+                    self.json_response(exc.status, {'error': exc.message})
+                    return
+                except Exception:
+                    self.json_response(503, {'error': 'Authentication service unavailable.'})
+                    return
             if self.path == '/api/status':
                 supplied = self.headers.get('Authorization', '')
                 if token and not hmac.compare_digest(supplied.encode(), ('Bearer ' + token).encode()):
@@ -195,15 +274,17 @@ def serve(args):
                 self.respond(200, json.dumps(monitor.snapshot()).encode(), 'application/json')
                 return
             assets = {'/': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'),
-                      '/profiles.js': ('profiles.js', 'text/javascript'), '/style.css': ('style.css', 'text/css')}
+                      '/profiles.js': ('profiles.js', 'text/javascript'), '/login.js': ('login.js', 'text/javascript'), '/style.css': ('style.css', 'text/css')}
             if self.path not in assets:
                 self.respond(404, b'Not found', 'text/plain')
                 return
             name, mime = assets[self.path]
             self.respond(200, (HERE / name).read_bytes(), mime)
 
-        def respond(self, status, data, mime):
+        def respond(self, status, data, mime, headers=None):
             self.send_response(status)
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
             self.send_header('Content-Type', mime + '; charset=utf-8')
             self.send_header('Content-Length', str(len(data)))
             self.send_header('Cache-Control', 'no-store')
@@ -213,7 +294,32 @@ def serve(args):
             self.end_headers()
             self.wfile.write(data)
 
-    ThreadingHTTPServer((args.bind, args.port), Handler).serve_forever()
+    class BoundedServer(ThreadingHTTPServer):
+        daemon_threads = True
+        slots = threading.BoundedSemaphore(32)
+
+        def get_request(self):
+            request, address = super().get_request()
+            request.settimeout(5)
+            return request, address
+
+        def process_request(self, request, address):
+            if not self.slots.acquire(blocking=False):
+                self.shutdown_request(request)
+                return
+            try:
+                super().process_request(request, address)
+            except Exception:
+                self.slots.release()
+                raise
+
+        def process_request_thread(self, request, address):
+            try:
+                super().process_request_thread(request, address)
+            finally:
+                self.slots.release()
+
+    BoundedServer((args.bind, args.port), Handler).serve_forever()
 
 
 if __name__ == '__main__':
@@ -222,5 +328,7 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=8787)
     parser.add_argument('--telemetry', default='/telemetry')
     parser.add_argument('--token-file')
+    parser.add_argument('--auth-dir', help='Private initialized account directory; enables login sessions')
+    parser.add_argument('--origin', help='Exact browser origin; HTTPS required except loopback SSH access')
     parser.add_argument('--history', help='Optional writable directory for up to 200 observations, retained 30 days')
     serve(parser.parse_args())
