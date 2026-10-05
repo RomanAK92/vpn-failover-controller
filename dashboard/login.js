@@ -44,15 +44,15 @@ const AccountsUI = (() => {
       const accounts = await fetch('/api/accounts',{cache:'no-store',credentials:'same-origin'});
       const security = await fetch('/api/security-events',{cache:'no-store',credentials:'same-origin'});
       if(!accounts.ok||!security.ok)throw new Error('Administrator session required.');
-      element('usersList').textContent=(await accounts.json()).users.map(u=>u.username+' � '+u.role).join('\n');
-      element('securityEvents').textContent=(await security.json()).events.map(e=>new Date(e.time*1000).toLocaleString()+' � '+e.event+(e.username?' � '+e.username:'')).join('\n');
+      element('usersList').textContent=(await accounts.json()).users.map(u=>u.username+' — '+u.role).join('\n');
+      element('securityEvents').textContent=(await security.json()).events.map(e=>new Date(e.time*1000).toLocaleString()+' — '+e.event+(e.username?' — '+e.username:'')).join('\n');
     }catch(error){element('usersMessage').textContent=error.message;}
   };
   element('saveUser').onclick = async () => {
     element('saveUser').disabled=true;
     try {
-      if(!/^[a-z][a-z0-9_.-]{2,31}$/.test(element('newUsername').value))throw new Error('Use 3�32 lowercase letters, numbers, dots, underscores or hyphens, starting with a letter.');
-      if(element('newPassword').value.length<15||element('newPassword').value.length>128)throw new Error('Use a new passphrase of 15�128 characters.');
+      if(!/^[a-z][a-z0-9_.-]{2,31}$/.test(element('newUsername').value))throw new Error('Use 3–32 lowercase letters, numbers, dots, underscores or hyphens, starting with a letter.');
+      if(element('newPassword').value.length<15||element('newPassword').value.length>128)throw new Error('Use a new passphrase of 15–128 characters.');
       const result=await request('/api/accounts',{username:element('newUsername').value,role:element('newRole').value,password:element('newPassword').value,current_password:element('currentPassword').value,replace:element('replaceUser').checked});
       element('usersMessage').textContent='Account saved. Previous sessions were revoked if this was a reset.';
       if(result.reauthenticate){user=null;render('Your account changed. Sign in again.');element('clear').click();if(typeof refresh==='function')await refresh();}
