@@ -1,4 +1,4 @@
-# Account-mode validation � 5 October 2026
+# Account-mode validation — 5 October 2026
 
 Development on secure-management, separate from the merged installer/history
 foundation. No production server or live router was accessed.
