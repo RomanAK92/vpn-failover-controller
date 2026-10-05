@@ -229,6 +229,8 @@ def serve(args):
                 if self.path == '/api/login':
                     sid, user = accounts.login(data.get('username'), data.get('password'), self.client_address[0])
                     self.json_response(200, user, {'Set-Cookie': cookie_header(sid, secure)})
+                elif self.path == '/api/accounts':
+                    self.json_response(200, accounts.change_user(self.sid(), self.headers.get('X-CSRF-Token', ''), data.get('current_password'), data.get('username'), data.get('password'), data.get('role'), data.get('replace', False)))
                 elif self.path == '/api/activity':
                     self.json_response(200, accounts.session(self.sid(), self.headers.get('X-CSRF-Token', '')))
                 elif self.path == '/api/logout':
@@ -253,6 +255,9 @@ def serve(args):
                     user = accounts.session(self.sid(), touch=False)
                     if self.path == '/api/session':
                         self.json_response(200, user)
+                        return
+                    if self.path == '/api/accounts':
+                        self.json_response(200, {'users': accounts.list_users(self.sid())})
                         return
                     if self.path == '/api/security-events':
                         self.json_response(200, {'events': accounts.events(self.sid())})
