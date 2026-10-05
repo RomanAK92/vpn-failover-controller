@@ -13,6 +13,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from history import History, MAX_AGE
 from accounts import Accounts, AuthError, origin_policy, cookie_token, cookie_header
+from drafts import Drafts, DraftError
 from urllib.parse import urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -189,6 +190,10 @@ def serve(args):
     accounts = Accounts(auth_dir) if auth_dir else None
     if accounts and not accounts.db.execute("SELECT 1 FROM users WHERE role='admin'").fetchone():
         raise ValueError('Create an administrator before starting account mode.')
+    draft_dir = getattr(args, 'draft_dir', None)
+    if draft_dir and not accounts:
+        raise ValueError('Private drafts require initialized account mode.')
+    drafts = Drafts(draft_dir, getattr(args, 'validator', '/validators/doctor.py')) if draft_dir else None
     monitor = Monitor(args.telemetry, getattr(args, 'history', None))
     def sample():
         while True:
@@ -221,7 +226,8 @@ def serve(args):
                 if self.headers.get('Content-Type') != 'application/json' or self.headers.get('Transfer-Encoding'):
                     raise AuthError(400, 'Use a bounded JSON request.')
                 length = int(self.headers.get('Content-Length', '0'))
-                if not 1 <= length <= 4096:
+                limit = 65536 if self.path == '/api/drafts' and drafts else 4096
+                if not 1 <= length <= limit:
                     raise AuthError(413, 'Request too large or empty.')
                 data = json.loads(self.rfile.read(length))
                 if not isinstance(data, dict):
@@ -231,6 +237,9 @@ def serve(args):
                     self.json_response(200, user, {'Set-Cookie': cookie_header(sid, secure)})
                 elif self.path == '/api/accounts':
                     self.json_response(200, accounts.change_user(self.sid(), self.headers.get('X-CSRF-Token', ''), data.get('current_password'), data.get('username'), data.get('password'), data.get('role'), data.get('replace', False)))
+                elif self.path == '/api/drafts' and drafts:
+                    accounts.session(self.sid(), self.headers.get('X-CSRF-Token', ''), admin=True)
+                    self.json_response(201, drafts.save(data.get('files'), data.get('label')))
                 elif self.path == '/api/activity':
                     self.json_response(200, accounts.session(self.sid(), self.headers.get('X-CSRF-Token', '')))
                 elif self.path == '/api/logout':
@@ -240,6 +249,8 @@ def serve(args):
                     self.json_response(404, {'error': 'No such operation.'})
             except AuthError as exc:
                 self.json_response(exc.status, {'error': exc.message})
+            except DraftError as exc:
+                self.json_response(400, {'error': str(exc)})
             except (ValueError, TypeError, UnicodeError):
                 self.json_response(400, {'error': 'Invalid request.'})
             except Exception:
@@ -247,7 +258,7 @@ def serve(args):
 
         def do_GET(self):
             if self.path == '/api/auth':
-                self.json_response(200, {'mode': 'accounts' if accounts else 'token' if token else 'local'})
+                self.json_response(200, {'mode': 'accounts' if accounts else 'token' if token else 'local', 'drafts': drafts is not None})
                 return
             if self.path.startswith('/api/') and accounts:
                 try:
@@ -261,6 +272,10 @@ def serve(args):
                         return
                     if self.path == '/api/security-events':
                         self.json_response(200, {'events': accounts.events(self.sid())})
+                        return
+                    if self.path == '/api/drafts' and drafts:
+                        accounts.session(self.sid(), admin=True, touch=False)
+                        self.json_response(200, {'drafts': drafts.entries()})
                         return
                     if self.path != '/api/status':
                         self.json_response(404, {'error': 'No such operation.'})
@@ -279,7 +294,7 @@ def serve(args):
                 self.respond(200, json.dumps(monitor.snapshot()).encode(), 'application/json')
                 return
             assets = {'/': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'),
-                      '/profiles.js': ('profiles.js', 'text/javascript'), '/login.js': ('login.js', 'text/javascript'), '/style.css': ('style.css', 'text/css')}
+                      '/profiles.js': ('profiles.js', 'text/javascript'), '/login.js': ('login.js', 'text/javascript'), '/drafts.js': ('drafts.js', 'text/javascript'), '/style.css': ('style.css', 'text/css')}
             if self.path not in assets:
                 self.respond(404, b'Not found', 'text/plain')
                 return
@@ -335,5 +350,7 @@ if __name__ == '__main__':
     parser.add_argument('--token-file')
     parser.add_argument('--auth-dir', help='Private initialized account directory; enables login sessions')
     parser.add_argument('--origin', help='Exact browser origin; HTTPS required except loopback SSH access')
+    parser.add_argument('--draft-dir', help='Optional private draft storage; no live configuration apply')
+    parser.add_argument('--validator', default='/validators/doctor.py', help='Reviewed engine files-only validator')
     parser.add_argument('--history', help='Optional writable directory for up to 200 observations, retained 30 days')
     serve(parser.parse_args())
