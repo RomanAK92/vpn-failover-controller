@@ -81,20 +81,24 @@ class Accounts:
         if os.name == 'posix' and (path.stat().st_mode & 0o077):
             raise ValueError('Authentication database requires mode 0600.')
         self.db = sqlite3.connect(path, timeout=5, check_same_thread=False)
-        self.db.execute('PRAGMA foreign_keys=ON')
-        if initialize:
-            if self.db.execute('PRAGMA user_version').fetchone()[0] not in (0, 1):
+        try:
+            self.db.execute('PRAGMA foreign_keys=ON')
+            if initialize:
+                if self.db.execute('PRAGMA user_version').fetchone()[0] not in (0, 1):
+                    raise ValueError('Unsupported authentication database version.')
+                with self.db:
+                    self.db.executescript('''
+    CREATE TABLE IF NOT EXISTS users(name TEXT PRIMARY KEY, role TEXT NOT NULL, salt TEXT NOT NULL, hash TEXT NOT NULL, revision INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, user TEXT NOT NULL REFERENCES users(name), csrf TEXT NOT NULL, created REAL NOT NULL, seen REAL NOT NULL, revision INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS attempts(bucket TEXT PRIMARY KEY, count INTEGER NOT NULL, started REAL NOT NULL, blocked REAL NOT NULL);
+    CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, time REAL NOT NULL, event TEXT NOT NULL, user TEXT);
+    PRAGMA user_version=1;
+    ''')
+            if self.db.execute('PRAGMA user_version').fetchone()[0] != 1:
                 raise ValueError('Unsupported authentication database version.')
-            with self.db:
-                self.db.executescript('''
-CREATE TABLE IF NOT EXISTS users(name TEXT PRIMARY KEY, role TEXT NOT NULL, salt TEXT NOT NULL, hash TEXT NOT NULL, revision INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, user TEXT NOT NULL REFERENCES users(name), csrf TEXT NOT NULL, created REAL NOT NULL, seen REAL NOT NULL, revision INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS attempts(bucket TEXT PRIMARY KEY, count INTEGER NOT NULL, started REAL NOT NULL, blocked REAL NOT NULL);
-CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, time REAL NOT NULL, event TEXT NOT NULL, user TEXT);
-PRAGMA user_version=1;
-''')
-        if self.db.execute('PRAGMA user_version').fetchone()[0] != 1:
-            raise ValueError('Unsupported authentication database version.')
+        except Exception:
+            self.db.close()
+            raise
         # Equal work for an unknown account; never reveal whether the user exists.
         self.dummy_salt = secrets.token_hex(16)
         self.dummy_hash = '0' * 64
@@ -116,7 +120,9 @@ PRAGMA user_version=1;
             salt = secrets.token_hex(16)
             hashed = digest(password, salt)
         with self.lock, self.db:
-            old = self.db.execute('SELECT revision FROM users WHERE name=?', (name,)).fetchone()
+            old = self.db.execute('SELECT revision,role FROM users WHERE name=?', (name,)).fetchone()
+            if old and old[1] == 'admin' and role != 'admin' and self.db.execute("SELECT COUNT(*) FROM users WHERE role='admin'").fetchone()[0] <= 1:
+                raise ValueError('The last administrator cannot become a viewer.')
             if old and not replace:
                 raise ValueError('Account exists. Use explicit replace to reset it.')
             if not old and self.db.execute('SELECT COUNT(*) FROM users').fetchone()[0] >= 32:
@@ -194,6 +200,24 @@ PRAGMA user_version=1;
             user = self.session(sid, csrf)
             self.db.execute('DELETE FROM sessions WHERE id=?', (hashlib.sha256(sid.encode()).hexdigest(),))
             self.audit('logout', user['username'])
+
+    def list_users(self, sid):
+        self.session(sid, admin=True, touch=False)
+        with self.lock:
+            return [{'username': name, 'role': role} for name, role in self.db.execute('SELECT name,role FROM users ORDER BY name')]
+
+    def change_user(self, sid, csrf, current_password, name, password, role, replace=False):
+        if type(replace) is not bool:
+            raise ValueError('Replace must be an explicit boolean.')
+        with self.lock:
+            current = self.session(sid, csrf, admin=True)
+            temporary_sid, verified = self.login(current['username'], current_password, '127.0.0.1')
+            self.logout(temporary_sid, verified['csrf'])
+            try:
+                self.put_user(name, password, role, replace)
+            except ValueError as exc:
+                raise AuthError(400, str(exc)) from None
+            return {'username': name, 'role': role, 'reauthenticate': name == current['username']}
 
     def events(self, sid):
         self.session(sid, admin=True, touch=False)
