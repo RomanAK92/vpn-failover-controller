@@ -77,6 +77,28 @@ class AccountTests(unittest.TestCase):
         with self.assertRaises(AuthError):self.store.login('admin', PASSWORD, '127.0.0.1')
         self.store.login('admin', 'a replacement fixture passphrase', '127.0.0.1')
 
+    def test_account_change_requires_admin_csrf_and_reauthentication(self):
+        self.store.put_user('viewer', PASSWORD, 'viewer')
+        sid, user = self.store.login('admin', PASSWORD, '127.0.0.1')
+        viewer, vu = self.store.login('viewer', PASSWORD, '127.0.0.1')
+        with self.assertRaises(AuthError):self.store.change_user(viewer, vu['csrf'], PASSWORD, 'other', PASSWORD, 'viewer')
+        with self.assertRaises(AuthError):self.store.change_user(sid, 'wrong', PASSWORD, 'other', PASSWORD, 'viewer')
+        with self.assertRaises(AuthError):self.store.change_user(sid, user['csrf'], 'wrong', 'other', PASSWORD, 'viewer')
+        self.store.change_user(sid, user['csrf'], PASSWORD, 'other', PASSWORD, 'viewer')
+        self.assertEqual(self.store.list_users(sid)[1]['username'], 'other')
+
+    def test_last_admin_cannot_be_demoted_and_self_reset_revokes_cookie(self):
+        sid, user = self.store.login('admin', PASSWORD, '127.0.0.1')
+        with self.assertRaises(ValueError):self.store.put_user('admin', PASSWORD, 'viewer', replace=True)
+        result=self.store.change_user(sid, user['csrf'], PASSWORD, 'admin', 'new fixture passphrase for reset', 'admin', True)
+        self.assertTrue(result['reauthenticate'])
+        with self.assertRaises(AuthError):self.store.session(sid)
+
+    def test_unknown_schema_is_not_overwritten_by_account_initialization(self):
+        self.store.db.execute('PRAGMA user_version=9');self.store.db.commit()
+        with self.assertRaises(ValueError):Accounts(self.temp.name, initialize=True)
+        self.assertEqual(self.store.db.execute('PRAGMA user_version').fetchone()[0], 9)
+
     def test_restart_preserves_session_and_logout_revokes_it(self):
         sid, user = self.store.login('admin', PASSWORD, '127.0.0.1')
         self.store.close();self.store = Accounts(self.temp.name, clock=lambda:self.now)
@@ -168,6 +190,18 @@ class AccountHTTPTests(unittest.TestCase):
         cookie,_=self.login('viewer')
         self.assertEqual(self.request('/api/security-events',headers={'Cookie':cookie})[0],403)
         self.assertEqual(self.request('/api/apply',{}, {'Cookie':cookie})[0],404)
+
+    def test_http_account_management_reauth_and_roles(self):
+        cookie,user=self.login()
+        body={'username':'operator','password':PASSWORD,'role':'viewer','current_password':PASSWORD,'replace':False}
+        self.assertEqual(self.request('/api/accounts',body,{'Cookie':cookie})[0],403)
+        headers={'Cookie':cookie,'X-CSRF-Token':user['csrf']}
+        self.assertEqual(self.request('/api/accounts',dict(body,current_password='incorrect'),headers)[0],401)
+        self.assertEqual(self.request('/api/accounts',body,headers)[0],200)
+        result=self.request('/api/accounts',headers={'Cookie':cookie})
+        self.assertIn({'username':'operator','role':'viewer'},result[2]['users'])
+        viewer,v=self.login('operator')
+        self.assertEqual(self.request('/api/accounts',dict(body,username='third'),{'Cookie':viewer,'X-CSRF-Token':v['csrf']})[0],403)
 
     def test_request_size_and_malformed_json_bounded(self):
         self.assertEqual(self.request('/api/login',{'password':'x'*5000})[0],413)
