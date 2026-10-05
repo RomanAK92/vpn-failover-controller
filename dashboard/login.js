@@ -6,6 +6,8 @@ const AccountsUI = (() => {
     element('accountPanel').hidden = mode !== 'accounts' && mode !== 'unavailable';
     element('loginFields').hidden = !!user;
     element('signOut').hidden = !user;
+    element('usersPanel').hidden = !user || user.role !== 'admin';
+    if(!user){element('usersList').textContent='';element('securityEvents').textContent='';element('newPassword').value='';element('currentPassword').value='';}
     element('accountStatus').textContent = message || (user ? 'Signed in as '+user.username+' ('+user.role+').' : 'Sign in to view this server.');
     document.querySelector('.unlock').hidden = mode === 'accounts';
   }
@@ -36,6 +38,26 @@ const AccountsUI = (() => {
   element('signOut').onclick = async () => {
     try {await request('/api/logout',{});user=null;render('Signed out.');element('clear').click();if(typeof refresh==='function')await refresh();}
     catch (error) {render(error.message);}
+  };
+  element('listUsers').onclick = async () => {
+    try {
+      const accounts = await fetch('/api/accounts',{cache:'no-store',credentials:'same-origin'});
+      const security = await fetch('/api/security-events',{cache:'no-store',credentials:'same-origin'});
+      if(!accounts.ok||!security.ok)throw new Error('Administrator session required.');
+      element('usersList').textContent=(await accounts.json()).users.map(u=>u.username+' � '+u.role).join('\n');
+      element('securityEvents').textContent=(await security.json()).events.map(e=>new Date(e.time*1000).toLocaleString()+' � '+e.event+(e.username?' � '+e.username:'')).join('\n');
+    }catch(error){element('usersMessage').textContent=error.message;}
+  };
+  element('saveUser').onclick = async () => {
+    element('saveUser').disabled=true;
+    try {
+      if(!/^[a-z][a-z0-9_.-]{2,31}$/.test(element('newUsername').value))throw new Error('Use 3�32 lowercase letters, numbers, dots, underscores or hyphens, starting with a letter.');
+      if(element('newPassword').value.length<15||element('newPassword').value.length>128)throw new Error('Use a new passphrase of 15�128 characters.');
+      const result=await request('/api/accounts',{username:element('newUsername').value,role:element('newRole').value,password:element('newPassword').value,current_password:element('currentPassword').value,replace:element('replaceUser').checked});
+      element('usersMessage').textContent='Account saved. Previous sessions were revoked if this was a reset.';
+      if(result.reauthenticate){user=null;render('Your account changed. Sign in again.');element('clear').click();if(typeof refresh==='function')await refresh();}
+    }catch(error){element('usersMessage').textContent=error.message;}
+    finally{element('newPassword').value='';element('currentPassword').value='';element('saveUser').disabled=false;}
   };
   async function activity() {
     if (!user || Date.now()-lastActivity<60000) return;
