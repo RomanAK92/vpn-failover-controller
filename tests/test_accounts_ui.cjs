@@ -9,6 +9,8 @@ const context={document:{getElementById:get,querySelector:()=>get('unlockBox'),a
  if(path==='/api/auth')return {ok:true,json:async()=>({mode:'accounts'})};
  if(path==='/api/session')return {ok:false,json:async()=>({})};
  if(path==='/api/login'){logged=true;return {ok:true,json:async()=>user};}
+ if(path==='/api/accounts')return {ok:true,json:async()=>options.method==='POST'?{username:'operator',role:'viewer',reauthenticate:false}:{users:[{username:'admin',role:'admin'}]}};
+ if(path==='/api/security-events')return {ok:true,json:async()=>({events:[]})};
  if(path==='/api/logout'){logged=false;return {ok:true,json:async()=>({logged_out:true})};}
  return {ok:true,json:async()=>user};
 },refresh:async()=>{}};
@@ -24,6 +26,9 @@ async function main(){
  await listeners.pointerdown();const count=calls.filter(c=>c.path==='/api/activity').length;
  await listeners.keydown();assert.equal(calls.filter(c=>c.path==='/api/activity').length,count);
  const activity=calls.find(c=>c.path==='/api/activity');assert.equal(activity.options.headers['X-CSRF-Token'],user.csrf);
+ await get('listUsers').onclick();assert.match(get('usersList').textContent,/admin/);
+ get('newUsername').value='operator';get('newRole').value='viewer';get('newPassword').value='fixture new passphrase';get('currentPassword').value='fixture current passphrase';get('replaceUser').checked=false;await get('saveUser').onclick();
+ const save=calls.find(c=>c.path==='/api/accounts'&&c.options.method==='POST');assert.equal(save.options.headers['X-CSRF-Token'],user.csrf);assert.equal(JSON.parse(save.options.body).replace,false);assert.equal(get('newPassword').value,'');assert.equal(get('currentPassword').value,'');
  await get('signOut').onclick();assert.equal(logged,false);assert.equal(get('clear').clicked,true);
  assert.equal(vm.runInContext('AccountsUI.canRead()',context),false);
  const logout=calls.find(c=>c.path==='/api/logout');assert.equal(logout.options.headers['X-CSRF-Token'],user.csrf);
