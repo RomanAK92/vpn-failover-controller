@@ -27,7 +27,7 @@ removed. Only the three original lab containers remained, with their previous
 running/stopped states and unchanged host default route. The installer units
 and its owned installation were removed after acceptance. Docker Compose v2
 was installed as a prerequisite on the isolated test host and remains installed.
-Original diagnostic logs were retained privately.
+Original diagnostic logs were retained privately. Six additional reboot checks passed: a changed host boot ID, automatic dashboard/mirror startup, fresh telemetry, preserved switch history without duplication, private history permissions, and unchanged original service states/default route. The temporary reboot fixture and owned dashboard installation were removed afterward.
 
 ## What these checks prove
 
@@ -77,8 +77,7 @@ preview and apply procedure are documented in dashboard/README.md.
 
 ## Limits
 
-No reboot was performed: service restart recovery was tested, while automatic
-startup after an actual host reboot remains to be checked. The installer supports
+An actual isolated test-host reboot verified automatic dashboard/mirror startup and history recovery. The installer supports
 first installation and identical repeat, not automatic version upgrades.
 No new long-duration observation or natural IPsec rekey validation is claimed.
 This is Linux validation, not a new physical MikroTik validation.
