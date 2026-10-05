@@ -57,7 +57,7 @@ def app_mode():
     ThreadingHTTPServer(('0.0.0.0',8080),Handler).serve_forever()
 
 
-def suite(root,keep=False,soak_seconds=0):
+def suite(root,keep=False,soak_seconds=0,dashboard=False):
     root=pathlib.Path(root).resolve();sys.path.insert(0,str(root/'build'))
     from configuration import normalize
     tag='vpn-release-'+secrets.token_hex(4)
@@ -285,6 +285,9 @@ secrets {{
         else:raise RuntimeError('Healthcheck did not become healthy after recovery')
         http_from_app('main')
         record('healthcheck-and-256m-memory-limit')
+        if dashboard:
+            import integration_dashboard
+            integration_dashboard.check(root,tag,names,temp,runtime,dx,run,state,wait_path,block,record,network_snapshot,http_from_app)
         if soak_seconds:
             begin=time.monotonic();deadline=begin+soak_seconds;checks=0;last_report=begin
             while time.monotonic()<deadline:
@@ -316,10 +319,10 @@ secrets {{
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--root',default=str(pathlib.Path(__file__).resolve().parent.parent))
-    p.add_argument('--peer');p.add_argument('--app',action='store_true');p.add_argument('--keep',action='store_true');p.add_argument('--soak-seconds',type=int,default=0)
+    p.add_argument('--peer');p.add_argument('--app',action='store_true');p.add_argument('--keep',action='store_true');p.add_argument('--soak-seconds',type=int,default=0);p.add_argument('--dashboard',action='store_true')
     a=p.parse_args()
     if a.peer:peer_mode(a.peer)
     elif a.app:app_mode()
     else:
         if not 0<=a.soak_seconds<=172800:p.error('soak-seconds must be between 0 and 172800')
-        suite(a.root,a.keep,a.soak_seconds)
+        suite(a.root,a.keep,a.soak_seconds,a.dashboard)
