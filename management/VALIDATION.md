@@ -371,3 +371,21 @@ current-passphrase inputs. Regressions verify the correct input is used, empty
 requests are blocked and all three management secret fields clear after sensitive
 actions or session loss. Timer values and backend authorization were unchanged.
 Actual human confirmation remains pending.
+
+The user subsequently reported testing the flow; the retained review engine was
+observed healthy and confirmed after its previously observed rollback, with no
+automated Apply against that fixture in between. This records the human
+Apply/confirmation result. The user then requested a less crowded interface.
+
+The frontend now separates Overview, Profiles, VPN changes and Accounts. Only
+one task view is displayed; admin-only views remain unavailable after session
+loss. Existing deep links to management remain supported. Preparing drafts,
+archives and temporary maintenance sit in labelled disclosure panels. The live
+step switches from Apply to Keep/Undo only while pending; inactive confirmation
+buttons are hidden. HTML balance, unique IDs and all existing bindings were
+checked. Node regressions cover protected view visibility and pending-step
+controls. An API-backed strict-HTML-ID test rendered healthy/confirmed status in
+the management view. Existing account/session rows were unchanged during the
+web-only deployment; VPN configuration and engine process were untouched.
+Remaining profile/viewer/accessibility and simplified-layout human review are
+not implied by these checks.
