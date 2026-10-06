@@ -226,6 +226,68 @@ def finish(managed, names, run, record):
     record('guided-monitoring-and-drafts-after-encrypted-failover-and-engine-recovery')
 
 
+def upgrade(managed,names,root,temp,wan,appnet,containers,run,record,previous_image):
+    """Review-backed fresh-install upgrade in this disposable namespace only.
+
+    Restore with the new source in a fresh Python process; imported old modules
+    must never accidentally build the successor from the predecessor's code.
+    Old accounts/sessions/TLS are intentionally not part of this VPN backup.
+    """
+    old_receipt=json.loads((managed['destination']/'installation.json').read_text())
+    destination=temp/'upgraded-installation';password=secrets.token_urlsafe(24)
+    code='''import json,sys,pathlib
+p=json.load(sys.stdin);sys.path.insert(0,str(pathlib.Path(p['source'])/'management'))
+import backup
+payload=backup.snapshot(p['previous']);encrypted=backup.encrypt(payload,p['backup_password'])
+backup.write_backup(p['backup_file'],encrypted)
+receipt=backup.restore(backup.decrypt(encrypted,p['backup_password']),p['destination'],'admin',p['password'])
+assert not receipt['started'] and backup.snapshot(p['destination'])==payload
+print(json.dumps(receipt))
+'''
+    receipt=json.loads(run(sys.executable,'-c',code,input=json.dumps({
+        'source':str(root),'previous':str(managed['destination']),'destination':str(destination),
+        'backup_file':str(temp/'upgrade-confirmed.vpnbackup'),
+        'backup_password':secrets.token_urlsafe(24),'password':password})))
+    new_receipt=json.loads((destination/'installation.json').read_text())
+    if (receipt['started'] or old_receipt['source_sha256']['management/manager.py']
+        ==new_receipt['source_sha256']['management/manager.py']):
+        raise RuntimeError('Different-source upgrade must prepare new code without starting it.')
+    for key in ('vpn','managed-web','managed-mirror'):
+        # Retain operational evidence before exact owned old containers are removed.
+        logs=run('docker','logs',names[key])
+        path=root.parent/(managed['tag']+'-predecessor-'+key+'.log')
+        fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+        with os.fdopen(fd,'w') as stream:stream.write(logs);stream.flush();os.fsync(stream.fileno())
+    image=managed['tag']+'-upgraded:test'
+    managed['upgrade_image']=image
+    run('docker','build','-t',image,str(destination/'engine'),timeout=600)
+    # Never run the old and new network owners simultaneously.
+    for key in ('managed-web','managed-mirror','vpn'):
+        run('docker','stop','--time','20',names[key],timeout=40)
+        run('docker','rm',names[key])
+        containers.remove(names[key])
+    managed.update(destination=destination,password=password,generation=new_receipt['initial_generation'],
+        management=destination/'data/management',control=destination/'data/control',
+        management_mount=str(destination/'data/management'),previous_image=previous_image)
+    names['vpn']=managed['tag']+'-upgraded-vpn'
+    run('docker','run','-d','--name',names['vpn'],'--network',wan,'--ip','172.28.241.10',
+        '--cap-drop','ALL','--cap-add','NET_ADMIN','--cap-add','NET_RAW','--cap-add','NET_BIND_SERVICE',
+        '--security-opt','no-new-privileges:true','--read-only','--memory','256m','--pids-limit','128',
+        '--restart','unless-stopped','--sysctl','net.ipv4.ip_forward=1','--sysctl','net.ipv4.conf.all.rp_filter=0',
+        '--tmpfs','/run:rw,nosuid,size=16m','--tmpfs','/tmp:rw,noexec,nosuid,size=16m','--entrypoint','sh',
+        '-v',str(destination/'data/management')+':/management:rw',
+        '-v',str(destination/'data/control')+':/control:rw',
+        '-v',str(destination/'data/runtime')+':/run/vpn-router',image,'-c',
+        'ip route replace default via 172.28.241.1 && iptables -N DOCKER-USER && '
+        'iptables -A FORWARD -j DOCKER-USER && exec python3 -u /app/management/manager.py '
+        '--application-file /management/readiness.json --enable-test-apply')
+    containers.append(names['vpn'])
+    run('docker','network','connect','--ip','172.28.240.2',appnet,names['vpn'])
+    start(managed,names,temp,containers,run,record)
+    record('different-source-encrypted-upgrade-new-code-new-account-no-simultaneous-owner')
+    return image
+
+
 def private_command(names, run, request):
     code = '''import json,socket,sys
 sys.path.insert(0,'/app/management')
@@ -282,6 +344,11 @@ def transactions(managed, names, run, record, application_check):
         c = status['transaction']['change']
         return c and c['phase']=='rolled-back' and status['running_generation']==previous and status['ready']
     transaction_wait(names, run, lambda s: s['ready'])
+    run('docker','exec',names['vpn'],'python3','-c',
+        "import sys;sys.path.insert(0,'/app/management');from driver import ApplicationProbe;"
+        "assert ApplicationProbe({'address':'10.60.0.60','port':18080,'scheme':'tcp'},'10.60.0.0/24').check();"
+        "assert not ApplicationProbe({'address':'10.60.0.60','port':18079,'scheme':'tcp'},'10.60.0.0/24').check()")
+    record('real-private-tcp-readiness-permits-open-port-and-refuses-closed-port')
     def selected(path, timeout=None):
         if timeout is None:
             timeout=max(45,managed['config']['interval']*managed['config']['recovery_rounds']+20)
@@ -366,6 +433,19 @@ def transactions(managed, names, run, record, application_check):
     run('docker', 'restart', names['vpn'], timeout=40)
     transaction_wait(names, run, lambda s: recovered(s, good), timeout=180)
     record('real-container-restart-reverts-unconfirmed-generation-before-startup', response=application_check('main'))
+    unused=candidate(8)
+    before=transaction_wait(names,run,lambda s:s['ready'])['running_generation']
+    receipt=call(managed,names,run,'/api/control/archive',{
+        'generation':unused,'current_password':managed['password']})['body']
+    if receipt['applied'] or receipt['state']!='archived':raise RuntimeError('Archive receipt invalid.')
+    status=transaction_wait(names,run,lambda s:s['ready'])
+    if status['running_generation']!=before or not any(p['id']==unused for p in status['archived']):
+        raise RuntimeError('Archiving changed active traffic or failed to retain the private version.')
+    call(managed,names,run,'/api/control/restore',{'generation':unused,'current_password':managed['password']})
+    restored=transaction_wait(names,run,lambda s:s['ready'])
+    if restored['running_generation']!=before or not any(p['id']==unused for p in restored['prepared']):
+        raise RuntimeError('Private restore changed active traffic or failed to retain prepared settings.')
+    record('authenticated-unused-generation-archive-restore-preserves-encrypted-traffic',response=application_check('main'))
     if not managed['bounded_test_storage']:
         # This is a real disk bind, so NEVER fill it as a failure injection.
         import backup
