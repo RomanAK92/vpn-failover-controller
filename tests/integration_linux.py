@@ -70,7 +70,7 @@ def app_mode():
     ThreadingHTTPServer(('0.0.0.0',8080),Handler).serve_forever()
 
 
-def suite(root,keep=False,soak_seconds=0,dashboard=False,management=False,persistent=False,upgrade_from=None,reboot_directory=None,review_directory=None):
+def suite(root,keep=False,soak_seconds=0,dashboard=False,management=False,persistent=False,upgrade_from=None,reboot_directory=None,review_directory=None,normal_controls=False):
     root=pathlib.Path(root).resolve();sys.path.insert(0,str(root/'build'))
     from configuration import normalize
     tag='vpn-release-'+secrets.token_hex(4)
@@ -200,7 +200,7 @@ secrets {{
         if management:
             import integration_managed
             managed=integration_managed.prepare(pathlib.Path(upgrade_from).resolve() if upgrade_from else root,
-                temp,controller,tag,run,containers,volumes,persistent=persistent)
+                temp,controller,tag,run,containers,volumes,persistent=persistent,normal_controls=normal_controls)
             controller=managed['destination']/'config'
             runtime=managed['destination']/'data/runtime'
             config=managed['config']
@@ -222,7 +222,7 @@ secrets {{
                 ['-v',managed['management_mount']+':/management:rw','-v',str(managed['control'])+':/control:rw']
                 if managed else ['-v',str(controller)+':/etc/vpn:ro']),'-v',str(runtime)+':/run/vpn-router',
             image,'-c','ip route replace default via 172.28.241.1 && iptables -N DOCKER-USER && iptables -A FORWARD -j DOCKER-USER && exec python3 -u '+(
-                '/app/management/manager.py --application-file /management/readiness.json --enable-test-apply'
+                '/app/management/manager.py --application-file /management/readiness.json '+('--enable-managed-changes' if managed.get('normal_controls') else '--enable-test-apply')
                 if managed and managed.get('driver') else '/app/supervisor.py'))
         containers.append(names['vpn'])
         run('docker','network','connect','--ip','172.28.240.2',appnet,names['vpn'])
@@ -384,6 +384,7 @@ if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--root',default=str(pathlib.Path(__file__).resolve().parent.parent))
     p.add_argument('--peer');p.add_argument('--app',action='store_true');p.add_argument('--keep',action='store_true');p.add_argument('--soak-seconds',type=int,default=0);p.add_argument('--dashboard',action='store_true');p.add_argument('--management',action='store_true')
     p.add_argument('--management-persistent',action='store_true',help='Owned disk-bind installation; never fills its filesystem')
+    p.add_argument('--management-normal-controls',action='store_true',help='Owned acceptance using explicit operator flags instead of test flags')
     p.add_argument('--upgrade-from',help='Reviewed previous manager source, isolated fixture only; requires persistent mode')
     p.add_argument('--reboot-directory',help='Private isolated-lab fixture directory; retains verified resources for a separately authorized host reboot')
     p.add_argument('--review-directory',help='Keep only a newly initialized owned fixture for human browser acceptance; SSH loopback access only')
@@ -391,8 +392,9 @@ if __name__=='__main__':
     if a.peer:peer_mode(a.peer)
     elif a.app:app_mode()
     else:
+        if a.management_normal_controls and (not a.management_persistent or a.keep or a.review_directory or a.reboot_directory or a.upgrade_from or a.soak_seconds or a.dashboard):p.error('Operator-mode acceptance requires only fresh persistent mode without retained fixtures.')
         if not 0<=a.soak_seconds<=172800:p.error('soak-seconds must be between 0 and 172800')
         if a.upgrade_from and not a.management_persistent:p.error('Upgrade acceptance requires persistent owned storage.')
         if a.reboot_directory and (not a.management_persistent or a.keep):p.error('Reboot preparation requires persistent mode without --keep.')
         if a.review_directory and (not a.management_persistent or a.keep or a.reboot_directory or a.upgrade_from or a.soak_seconds or a.dashboard):p.error('Human review requires only persistent mode and its dedicated private directory.')
-        suite(a.root,a.keep,a.soak_seconds,a.dashboard,a.management or a.management_persistent,a.management_persistent,a.upgrade_from,a.reboot_directory,a.review_directory)
+        suite(a.root,a.keep,a.soak_seconds,a.dashboard,a.management or a.management_persistent,a.management_persistent,a.upgrade_from,a.reboot_directory,a.review_directory,a.management_normal_controls)
