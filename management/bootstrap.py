@@ -247,7 +247,7 @@ def prepare(destination, source, username, password, managed=False, application=
         for name in ('Dockerfile', *[p.name for p in (ROOT/'build').glob('*.py')], 'strongswan.conf'):
             shutil.copyfile(ROOT/'build'/name, stage/'engine'/name)
             (stage/'engine'/name).chmod(0o644)
-        for name in ('Dockerfile', 'accounts.py', 'drafts.py', 'control.py', 'history.py', 'server.py', 'mirror.py',
+        for name in ('Dockerfile', 'accounts.py', 'drafts.py', 'control.py', 'support.py', 'history.py', 'server.py', 'mirror.py',
                      'index.html', 'app.js', 'profiles.js', 'login.js', 'drafts.js', 'management.js', 'style.css'):
             shutil.copyfile(ROOT/'dashboard'/name, stage/'web'/name)
             (stage/'web'/name).chmod(0o644)
