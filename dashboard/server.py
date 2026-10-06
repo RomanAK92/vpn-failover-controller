@@ -17,6 +17,7 @@ from history import History, MAX_AGE
 from accounts import Accounts, AuthError, origin_policy, cookie_token, cookie_header
 from drafts import Drafts, DraftError
 from control import Control, ControlError
+from support import report as support_report
 from urllib.parse import urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -278,6 +279,12 @@ def serve(args):
                 elif self.path == '/api/drafts' and drafts:
                     accounts.session(self.sid(), self.headers.get('X-CSRF-Token', ''), admin=True)
                     self.json_response(201, drafts.save(data.get('files'), data.get('label')))
+                elif self.path in ('/api/drafts/archive','/api/drafts/restore') and drafts:
+                    if set(data) != {'id','current_password'}:
+                        raise AuthError(400,'Select one private draft and provide fresh credentials.')
+                    user=accounts.reauthenticate(self.sid(),self.headers.get('X-CSRF-Token',''),data['current_password'],address)
+                    accounts.record_operation('draft-'+self.path.rsplit('/',1)[-1]+'-requested',user['username'])
+                    self.json_response(200,drafts.move_archive(data['id'],restore=self.path.endswith('/restore')))
                 elif self.path.startswith('/api/control/') and control:
                     action = self.path[len('/api/control/'):]
                     allowed = {'prepare': {'draft', 'current_password'},
@@ -286,6 +293,7 @@ def serve(args):
                                'revert': {'change_id', 'current_password'},
                                'operate': {'preferred', 'disabled', 'seconds', 'current_password'},
                                'automatic': {'current_password'}}
+                    allowed.update({'archive':{'generation','current_password'},'restore':{'generation','current_password'}})
                     if action not in allowed or set(data) != allowed[action]:
                         raise AuthError(400, 'Unsupported private operation or fields.')
                     for key in ('draft', 'generation', 'change_id'):
@@ -347,9 +355,14 @@ def serve(args):
                     if self.path == '/api/security-events':
                         self.json_response(200, {'events': accounts.events(self.sid())})
                         return
+                    if self.path == '/api/support':
+                        accounts.session(self.sid(), admin=True, touch=False)
+                        self.json_response(200, support_report(monitor.snapshot()),
+                            {'Content-Disposition': 'attachment; filename="vpn-support.json"'})
+                        return
                     if self.path == '/api/drafts' and drafts:
                         accounts.session(self.sid(), admin=True, touch=False)
-                        self.json_response(200, {'drafts': drafts.entries()})
+                        self.json_response(200, {'drafts': drafts.entries(),'archived':drafts.archived()})
                         return
                     if self.path == '/api/control/status' and control:
                         accounts.session(self.sid(), admin=True, touch=False)
