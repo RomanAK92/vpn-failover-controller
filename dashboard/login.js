@@ -41,7 +41,17 @@ const AccountsUI = (() => {
   async function request(path, body) {
     const response = await fetch(path, {method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-VPN-Request':'1',...(user?{'X-CSRF-Token':user.csrf}:{})},body:JSON.stringify(body)});
     const data = await response.json();
-    if (response.status===401 && path!=='/api/login')forgetSession('Session expired. Sign in again.');
+    if(response.status===401 && path!=='/api/login'){
+      let sessionValid=false;
+      if(user&&Object.prototype.hasOwnProperty.call(body,'current_password')){
+        try{
+          const check=await fetch('/api/session',{credentials:'same-origin',cache:'no-store'});
+          if(check.ok){const current=await check.json();sessionValid=current.username===user.username&&current.csrf===user.csrf&&current.role===user.role;}
+        }catch(_){/* An unverifiable session must not retain administrative controls. */}
+      }
+      if(sessionValid)throw new Error('Administrator passphrase was not accepted. No action was performed. Re-enter your current passphrase and try again.');
+      forgetSession('Session expired or unavailable. Sign in again.');
+    }
     if (!response.ok) throw new Error(data.error || 'Request failed.');
     return data;
   }
