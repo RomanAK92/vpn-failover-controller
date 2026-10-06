@@ -89,7 +89,7 @@ class Accounts:
         try:
             self.db.execute('PRAGMA foreign_keys=ON')
             if initialize:
-                if self.db.execute('PRAGMA user_version').fetchone()[0] not in (0, 1):
+                if self.db.execute('PRAGMA user_version').fetchone()[0] not in (0, 1, 2):
                     raise ValueError('Unsupported authentication database version.')
                 with self.db:
                     self.db.executescript('''
@@ -97,9 +97,17 @@ class Accounts:
     CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, user TEXT NOT NULL REFERENCES users(name), csrf TEXT NOT NULL, created REAL NOT NULL, seen REAL NOT NULL, revision INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS attempts(bucket TEXT PRIMARY KEY, count INTEGER NOT NULL, started REAL NOT NULL, blocked REAL NOT NULL);
     CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, time REAL NOT NULL, event TEXT NOT NULL, user TEXT);
-    PRAGMA user_version=1;
     ''')
-            if self.db.execute('PRAGMA user_version').fetchone()[0] != 1:
+            version=self.db.execute('PRAGMA user_version').fetchone()[0]
+            if version==0 and not initialize:
+                raise ValueError('Unsupported authentication database version.')
+            if version in (0,1):
+                with self.db:
+                    self.db.execute('BEGIN IMMEDIATE')
+                    if 'enabled' not in [row[1] for row in self.db.execute('PRAGMA table_info(users)')]:
+                        self.db.execute('ALTER TABLE users ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1))')
+                    self.db.execute('PRAGMA user_version=2')
+            if self.db.execute('PRAGMA user_version').fetchone()[0] != 2:
                 raise ValueError('Unsupported authentication database version.')
         except Exception:
             self.db.close()
@@ -116,7 +124,8 @@ class Accounts:
                          'vpn-prepare-requested', 'vpn-apply-requested', 'vpn-confirm-requested', 'vpn-revert-requested',
                          'vpn-operate-requested', 'vpn-automatic-requested',
                          'draft-archive-requested','draft-restore-requested',
-                         'vpn-archive-requested','vpn-restore-requested'):
+                         'vpn-archive-requested','vpn-restore-requested',
+                         'account-disabled','account-enabled','account-deleted'):
             raise ValueError('Unrecognized audit event.')
         self.db.execute('INSERT INTO audit(time,event,user) VALUES(?,?,?)', (self.clock(), event, user))
         self.db.execute('DELETE FROM audit WHERE id NOT IN (SELECT id FROM audit ORDER BY id DESC LIMIT 1000)')
@@ -129,15 +138,16 @@ class Accounts:
             salt = secrets.token_hex(16)
             hashed = digest(password, salt)
         with self.lock, self.db:
-            old = self.db.execute('SELECT revision,role FROM users WHERE name=?', (name,)).fetchone()
-            if old and old[1] == 'admin' and role != 'admin' and self.db.execute("SELECT COUNT(*) FROM users WHERE role='admin'").fetchone()[0] <= 1:
+            self.db.execute('BEGIN IMMEDIATE')
+            old = self.db.execute('SELECT revision,role,enabled FROM users WHERE name=?', (name,)).fetchone()
+            if old and old[1] == 'admin' and old[2] and role != 'admin' and self.db.execute("SELECT COUNT(*) FROM users WHERE role='admin' AND enabled=1").fetchone()[0] <= 1:
                 raise ValueError('The last administrator cannot become a viewer.')
             if old and not replace:
                 raise ValueError('Account exists. Use explicit replace to reset it.')
             if not old and self.db.execute('SELECT COUNT(*) FROM users').fetchone()[0] >= 32:
                 raise ValueError('Maximum of 32 accounts.')
             self.db.execute('DELETE FROM sessions WHERE user=?', (name,))
-            self.db.execute('INSERT INTO users VALUES(?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET role=excluded.role,salt=excluded.salt,hash=excluded.hash,revision=excluded.revision', (name, role, salt, hashed, old[0]+1 if old else 1))
+            self.db.execute('INSERT INTO users(name,role,salt,hash,revision) VALUES(?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET role=excluded.role,salt=excluded.salt,hash=excluded.hash,revision=excluded.revision', (name, role, salt, hashed, old[0]+1 if old else 1))
             self.audit('account-updated' if old else 'account-created', name)
 
     def login(self, name, password, address):
@@ -167,10 +177,10 @@ class Accounts:
                 for bucket, limit in buckets:
                     self.db.execute('INSERT INTO attempts VALUES(?,1,?,0) ON CONFLICT(bucket) DO UPDATE SET count=count+1', (bucket, now))
                     self.db.execute('UPDATE attempts SET blocked=? WHERE bucket=? AND count>=?', (now+BLOCK, bucket, limit))
-                user = self.db.execute('SELECT role,salt,hash,revision FROM users WHERE name=?', (name,)).fetchone()
+                user = self.db.execute('SELECT role,salt,hash,revision,enabled FROM users WHERE name=?', (name,)).fetchone()
                 salt, expected = (user[1], user[2]) if user else (self.dummy_salt, self.dummy_hash)
                 verified = hmac.compare_digest(digest(password, salt), expected)
-                if not user or not verified:
+                if not user or not verified or not user[4]:
                     self.audit('login-rejected')
                     # Commit protection even though the request is rejected.
                     self.db.commit()
@@ -190,7 +200,7 @@ class Accounts:
             raise AuthError()
         hashed = hashlib.sha256(sid.encode()).hexdigest()
         with self.lock, self.db:
-            row = self.db.execute('SELECT s.user,u.role,s.csrf,s.created,s.seen,s.revision,u.revision FROM sessions s JOIN users u ON u.name=s.user WHERE s.id=?', (hashed,)).fetchone()
+            row = self.db.execute('SELECT s.user,u.role,s.csrf,s.created,s.seen,s.revision,u.revision FROM sessions s JOIN users u ON u.name=s.user WHERE s.id=? AND u.enabled=1', (hashed,)).fetchone()
             now = self.clock()
             if not row or not row[3] <= now < row[3]+LIFETIME or not row[4] <= now < row[4]+IDLE or row[5] != row[6]:
                 self.db.execute('DELETE FROM sessions WHERE id=?', (hashed,))
@@ -213,7 +223,35 @@ class Accounts:
     def list_users(self, sid):
         self.session(sid, admin=True, touch=False)
         with self.lock:
-            return [{'username': name, 'role': role} for name, role in self.db.execute('SELECT name,role FROM users ORDER BY name')]
+            return [{'username': name, 'role': role, 'enabled':bool(enabled)} for name, role, enabled in self.db.execute('SELECT name,role,enabled FROM users ORDER BY name')]
+
+    def account_action(self, sid, csrf, current_password, name, action, confirmed=False, confirmation='', address='127.0.0.1'):
+        if action not in ('disable','enable','delete') or confirmed is not True:
+            raise AuthError(400,'Select and explicitly confirm an account action.')
+        if not isinstance(name,str) or not USERNAME.fullmatch(name):
+            raise AuthError(400,'Select a valid account.')
+        if action=='delete' and confirmation!=name:
+            raise AuthError(400,'Type the exact account name to confirm permanent deletion.')
+        with self.lock:
+            current=self.reauthenticate(sid,csrf,current_password,address)
+            with self.db:
+                self.db.execute('BEGIN IMMEDIATE')
+                # Recheck the acting administrator under the same database write
+                # lock as the target change; another process may have revoked it.
+                actor=self.db.execute("SELECT 1 FROM sessions s JOIN users u ON u.name=s.user WHERE s.id=? AND u.role='admin' AND u.enabled=1 AND s.revision=u.revision AND s.created<=? AND s.created>? AND s.seen<=? AND s.seen>?",(hashlib.sha256(sid.encode()).hexdigest(),self.clock(),self.clock()-LIFETIME,self.clock(),self.clock()-IDLE)).fetchone()
+                if not actor:raise AuthError(403,'Administrator session no longer available. Sign in again.')
+                old=self.db.execute('SELECT role,enabled FROM users WHERE name=?',(name,)).fetchone()
+                if not old:raise AuthError(404,'Account no longer exists. Refresh the list.')
+                if action in ('disable','delete'):
+                    if old[0]=='admin' and old[1] and self.db.execute("SELECT COUNT(*) FROM users WHERE role='admin' AND enabled=1").fetchone()[0]<=1:
+                        raise AuthError(400,'The last active administrator cannot be disabled or deleted.')
+                    if name==current['username']:
+                        raise AuthError(400,'Use another administrator account to disable or delete your own account.')
+                self.db.execute('DELETE FROM sessions WHERE user=?',(name,))
+                if action=='delete':self.db.execute('DELETE FROM users WHERE name=?',(name,))
+                else:self.db.execute('UPDATE users SET enabled=?,revision=revision+1 WHERE name=?',(int(action=='enable'),name))
+                self.audit({'disable':'account-disabled','enable':'account-enabled','delete':'account-deleted'}[action],name)
+            return {'username':name,'action':action,'sessions_revoked':True}
 
     def change_user(self, sid, csrf, current_password, name, password, role, replace=False, address='127.0.0.1'):
         if type(replace) is not bool:
