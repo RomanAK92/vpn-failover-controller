@@ -11,7 +11,14 @@ const AccountsUI = (() => {
     if(response.status===401)forgetSession('Session expired. Sign in again.');
     if(!response.ok)throw new Error('Could not load accounts. Sign in as administrator and refresh accounts.');
     const accounts=(await response.json()).users;
-    element('usersList').textContent=accounts.length?accounts.map(u=>u.username+' — '+(u.role==='admin'?'Administrator':'Viewer')).join('\n'):'No accounts to display.';
+    element('usersList').textContent=accounts.length?accounts.map(u=>u.username+' — '+(u.role==='admin'?'Administrator':'Viewer')+' — '+(u.enabled===false?'Disabled':'Active')).join('\n'):'No accounts to display.';
+    const selected=element('accountActionUser').value;
+    element('accountActionUser').textContent='';
+    for(const account of [{username:'',label:'Choose an account'},...accounts]){
+      const option=document.createElement('option');option.value=account.username;option.textContent=account.label||account.username;
+      element('accountActionUser').appendChild(option);
+    }
+    element('accountActionUser').value=accounts.some(a=>a.username===selected)?selected:'';
   }
   function forgetSession(message) {
     user=null;render(message);element('clear').click();
@@ -27,6 +34,7 @@ const AccountsUI = (() => {
     if(!user&&element('draftList'))element('draftList').textContent='';
     if(!user&&element('draftArchivePassword'))element('draftArchivePassword').value='';
     if(!user){element('usersList').textContent='';element('securityEvents').textContent='';element('usersMessage').textContent='';element('newPassword').value='';element('currentPassword').value='';}
+    if(!user){element('accountActionPassword').value='';element('accountActionUser').textContent='';element('accountDeleteName').value='';element('accountActionConfirmed').checked=false;element('accountActionMessage').textContent='';}
     element('accountStatus').textContent = message || (user ? 'Signed in as '+user.username+' ('+user.role+').' : 'Sign in to view this server.');
     document.querySelector('.unlock').hidden = mode === 'accounts';
   }
@@ -84,6 +92,22 @@ const AccountsUI = (() => {
       if(result.reauthenticate){user=null;render('Your account changed. Sign in again.');element('clear').click();if(typeof refresh==='function')await refresh();}
     }catch(error){element('usersMessage').textContent=error.message;}
     finally{element('newPassword').value='';element('currentPassword').value='';element('saveUser').disabled=false;element('saveUser').textContent='Save account';}
+  };
+  element('runAccountAction').onclick=async()=>{
+    const button=element('runAccountAction');button.disabled=true;
+    element('accountActionMessage').textContent='Checking the account action…';
+    try{
+      const username=element('accountActionUser').value, action=element('accountAction').value;
+      if(!username)throw new Error('Choose the account you want to change.');
+      if(!['disable','enable','delete'].includes(action))throw new Error('Choose an account action.');
+      if(!element('accountActionConfirmed').checked)throw new Error('Tick the confirmation box before continuing.');
+      if(!element('accountActionPassword').value)throw new Error('Enter your current administrator passphrase.');
+      if(action==='delete'&&element('accountDeleteName').value!==username)throw new Error('Type the exact account name to confirm permanent deletion.');
+      const result=await request('/api/accounts/'+action,{username,current_password:element('accountActionPassword').value,confirmed:true,confirmation:element('accountDeleteName').value});
+      element('accountActionMessage').textContent='Account “'+result.username+'” '+({disable:'disabled',enable:'enabled',delete:'permanently deleted'}[action])+'. All previous sessions were revoked.';
+      try{await loadAccounts();}catch(error){element('accountActionMessage').textContent+=' The list could not refresh; use Refresh accounts and security events.';}
+    }catch(error){element('accountActionMessage').textContent=error.message;}
+    finally{element('accountActionPassword').value='';element('accountDeleteName').value='';element('accountActionConfirmed').checked=false;button.disabled=false;}
   };
   async function activity() {
     if (!user || Date.now()-lastActivity<60000) return;
