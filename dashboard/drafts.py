@@ -5,6 +5,7 @@ import os
 import pathlib
 import re
 import secrets
+import stat
 import shutil
 import subprocess
 import sys
@@ -56,6 +57,35 @@ class Drafts:
             return manifest['summary']
         except (KeyError, TypeError, json.JSONDecodeError):
             raise DraftError('Draft receipt is unreadable.') from None
+
+    def package(self, identifier):
+        """Private transfer to the broker; never return this through HTTP."""
+        self.inspect(identifier)
+        directory = self.root/identifier
+        receipt = json.loads((directory/'manifest.json').read_text())
+        hashes = receipt.get('sha256')
+        if not isinstance(hashes, dict) or not 3 <= len(hashes) <= 12:
+            raise DraftError('Invalid private draft receipt.')
+        files, total = {}, 0
+        for name, expected in hashes.items():
+            if (not isinstance(name, str) or '/' in name or '\\' in name or name in ('.', '..')
+                or not isinstance(expected, str) or not re.fullmatch('[a-f0-9]{64}', expected)):
+                raise DraftError('Invalid private draft receipt.')
+            path = directory/name
+            attributes = path.lstat()
+            if (not stat.S_ISREG(attributes.st_mode) or attributes.st_nlink != 1
+                or attributes.st_size > MAX_BYTES or (os.name == 'posix' and
+                    (attributes.st_mode & 0o077 or attributes.st_uid != os.geteuid()))):
+                raise DraftError('Unsafe private draft file.')
+            content = path.read_bytes()
+            total += len(content)
+            if total > MAX_BYTES or hashlib.sha256(content).hexdigest() != expected:
+                raise DraftError('Private draft integrity failed.')
+            files[name] = content.decode('utf8')
+        _, required = self.check_bundle(files)
+        if set(files) != required:
+            raise DraftError('Private draft file set is inconsistent.')
+        return files
 
     @staticmethod
     def check_bundle(files):
