@@ -13,17 +13,19 @@ it switches back automatically.
 
 **v0.4.0:** adds an optional [read-only dashboard and local profile preparation](dashboard/README.md).
 It shows selected/standby tunnels and switching observations, and exports reviewed
-profile packages without applying them. The current development branch adds
+profile packages without applying them. The v0.4.1 installation/history foundation adds
 preview-first installation, automatic mirror/dashboard startup and persistent
 history. See the dashboard guide for the exact setup and limits.
 
 **Management development (not a stable release):** the `secure-management` branch
-adds individual administrator/viewer accounts, an optional private HTTPS proxy,
-[guided system preparation](management/README.md) and private configuration drafts
-validated by the actual VPN engine. Saving drafts does not apply them. The
+adds individual administrator/viewer accounts, restricted private HTTPS,
+[guided persistent installation](management/README.md), private validated drafts,
+transactional changes with independent rollback, temporary selection and encrypted
+offline recovery. Saving drafts does not apply them. Sensitive changes remain
+OFF in ordinary installations; only isolated acceptance enables test gates. The
 [full-system roadmap](MANAGEMENT_ROADMAP.md) and
-[management validation](management/VALIDATION.md) describe the remaining live
-apply/rollback, recovery and release gates. Existing published tags are unchanged.
+[management validation](management/VALIDATION.md) describe completed traffic/recovery checks and the remaining browser,
+host reboot, upgrade, retention and release gates. Existing published tags are unchanged.
 
 **v0.3.0:** adds one to four tunnels in any WireGuard/IPsec combination
 and fixes restart readiness so saved status alone cannot report a stopped
