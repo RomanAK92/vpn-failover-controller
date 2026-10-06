@@ -15,7 +15,9 @@ async function main(){
  status.prepared=[{id:'b'.repeat(32),label:'My revised priority'}];await refresh();
  el('preparedGeneration').value='b'.repeat(32);el('preparedGeneration').onchange();
  assert.equal(el('generationId').value,'b'.repeat(32));assert.equal(el('applyGeneration').disabled,true);
+ el('managementPassword').value='fixture-before-review';
  el('generationId').value='b'.repeat(32);await el('previewGeneration').onclick();
+ assert.equal(el('managementPassword').value,'fixture-before-review');
  assert.equal(el('applyGeneration').disabled,false);
  el('managementPassword').value='fixture-only-secret';await el('applyGeneration').onclick();
  assert.equal(calls.at(-1).data.current_password,'fixture-only-secret');assert.equal(el('managementPassword').value,'');
