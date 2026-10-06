@@ -1,13 +1,18 @@
 'use strict';
 const AccountsUI = (() => {
-  let mode = 'local', user = null, lastActivity = 0, draftsEnabled = false;
+  let mode = 'local', user = null, lastActivity = 0, draftsEnabled = false, controlEnabled = false, testApply = false;
   const element = id => document.getElementById(id);
+  function forgetSession(message) {
+    user=null;render(message);element('clear').click();
+  }
   function render(message = '') {
     element('accountPanel').hidden = mode !== 'accounts' && mode !== 'unavailable';
     element('loginFields').hidden = !!user;
     element('signOut').hidden = !user;
     element('usersPanel').hidden = !user || user.role !== 'admin';
     if(element('draftPanel'))element('draftPanel').hidden = !draftsEnabled || !user || user.role !== 'admin';
+    if(element('managementPanel'))element('managementPanel').hidden = !controlEnabled || !user || user.role !== 'admin';
+    if(!user&&element('managementPassword')){element('managementPassword').value='';element('managementStatus').textContent='';element('generationId').value='';element('managedDraft').textContent='';}
     if(!user&&element('draftList'))element('draftList').textContent='';
     if(!user){element('usersList').textContent='';element('securityEvents').textContent='';element('newPassword').value='';element('currentPassword').value='';}
     element('accountStatus').textContent = message || (user ? 'Signed in as '+user.username+' ('+user.role+').' : 'Sign in to view this server.');
@@ -16,6 +21,7 @@ const AccountsUI = (() => {
   async function request(path, body) {
     const response = await fetch(path, {method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-VPN-Request':'1',...(user?{'X-CSRF-Token':user.csrf}:{})},body:JSON.stringify(body)});
     const data = await response.json();
+    if (response.status===401 && path!=='/api/login')forgetSession('Session expired. Sign in again.');
     if (!response.ok) throw new Error(data.error || 'Request failed.');
     return data;
   }
@@ -24,6 +30,7 @@ const AccountsUI = (() => {
       const info = await fetch('/api/auth',{cache:'no-store'});
       if (!info.ok) throw new Error();
       const features = await info.json(); mode = features.mode; draftsEnabled = features.drafts === true;
+      controlEnabled = features.private_control === true; testApply = features.test_apply === true;
       if (mode === 'accounts') {
         const response = await fetch('/api/session',{credentials:'same-origin',cache:'no-store'});
         if (response.ok) user = await response.json();
@@ -64,11 +71,15 @@ const AccountsUI = (() => {
   async function activity() {
     if (!user || Date.now()-lastActivity<60000) return;
     lastActivity=Date.now();
-    try {await request('/api/activity',{});}catch (_) {user=null;render('Session expired. Sign in again.');}
+    try {await request('/api/activity',{});}catch (_) {forgetSession('Session expired. Sign in again.');}
   }
   document.addEventListener('pointerdown',activity);
   document.addEventListener('keydown',activity);
   return {ready,canRead:()=>mode!=='accounts'&&mode!=='unavailable'||!!user,
+    canControl:()=>controlEnabled&&!!user&&user.role==='admin',
+    testApplyEnabled:()=>testApply,
+    control:async(action,body)=>{if(!controlEnabled||!user||user.role!=='admin')throw new Error('Administrator access required.');return request('/api/control/'+action,body);},
+    controlStatus:async()=>{if(!controlEnabled||!user||user.role!=='admin')throw new Error('Administrator access required.');const response=await fetch('/api/control/status',{credentials:'same-origin',cache:'no-store'});if(response.status===401)forgetSession('Session expired. Sign in again.');if(!response.ok)throw new Error('Private engine status unavailable.');return response.json();},
     canManageDrafts:()=>draftsEnabled&&!!user&&user.role==='admin',
     saveDraft:async(files,label)=>{if(!draftsEnabled||!user||user.role!=='admin')throw new Error('Sign in as administrator on a draft-enabled installation.');return request('/api/drafts',{files,label});},
     listDrafts:async()=>{if(!draftsEnabled||!user||user.role!=='admin')throw new Error('Administrator access required.');const response=await fetch('/api/drafts',{credentials:'same-origin',cache:'no-store'});if(!response.ok)throw new Error('Draft list unavailable.');return response.json();},
