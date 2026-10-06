@@ -2,13 +2,14 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const elements=new Map();
 const get=id=>{if(!elements.has(id))elements.set(id,{value:'',hidden:false,disabled:false,textContent:'',appendChild(){},click(){this.clicked=true;}});return elements.get(id);};
-const calls=[],listeners={};let logged=false,failSave=false;
+const calls=[],listeners={};let logged=false,failSave=false,failReauth=false;
 const users=[{username:'admin',role:'admin'}];
 const user={username:'admin',role:'admin',csrf:'fixture-csrf-only'};
 const context={document:{getElementById:get,createElement:()=>({value:'',textContent:''}),querySelector:()=>get('unlockBox'),addEventListener:(name,callback)=>listeners[name]=callback},Date,console,fetch:async(path,options={})=>{
  calls.push({path,options});
  if(path==='/api/auth')return {ok:true,json:async()=>({mode:'accounts',private_control:true,live_changes_enabled:true,test_apply:false})};
- if(path==='/api/session')return {ok:false,json:async()=>({})};
+ if(path==='/api/session')return {ok:logged,status:logged?200:401,json:async()=>logged?user:{}};
+ if(path==='/api/control/apply'&&failReauth)return {ok:false,status:401,json:async()=>({error:'Login unsuccessful.'})};
  if(path==='/api/login'){logged=true;return {ok:true,json:async()=>user};}
  if(path==='/api/accounts'){
   if(options.method==='POST'){
@@ -68,6 +69,13 @@ async function main(){
  get('accountAction').value='delete';get('accountActionPassword').value='fixture current passphrase';get('accountActionConfirmed').checked=true;get('accountDeleteName').value='operator';
  await get('runAccountAction').onclick();assert.match(get('accountActionMessage').textContent,/permanently deleted/);assert.doesNotMatch(get('usersList').textContent,/operator/);
  assert.equal(get('accountActionPassword').value,'');assert.equal(get('accountDeleteName').value,'');assert.equal(get('accountActionConfirmed').checked,false);
+ failReauth=true;
+ await assert.rejects(()=>vm.runInContext('AccountsUI.control("apply",{current_password:"incorrect"})',context),/passphrase was not accepted/);
+ assert.equal(vm.runInContext('AccountsUI.canControl()',context),true);
+ logged=false;get('managementPassword').value='private';
+ await assert.rejects(()=>vm.runInContext('AccountsUI.control("apply",{current_password:"incorrect"})',context));
+ assert.equal(vm.runInContext('AccountsUI.canRead()',context),false);assert.equal(get('managementPassword').value,'');
+ get('username').value='admin';get('password').value='fixture passphrase';await get('signIn').onclick();
  await get('signOut').onclick();assert.equal(logged,false);assert.equal(get('clear').clicked,true);
  assert.equal(vm.runInContext('AccountsUI.canRead()',context),false);
  const logout=calls.find(c=>c.path==='/api/logout');assert.equal(logout.options.headers['X-CSRF-Token'],user.csrf);
