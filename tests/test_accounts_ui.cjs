@@ -39,6 +39,9 @@ async function main(){
  assert.equal(vm.runInContext('AccountsUI.canRead()',context),true);
  assert.equal(vm.runInContext('AccountsUI.testApplyEnabled()',context),true);
  assert.equal(vm.runInContext('AccountsUI.canControl()',context),true);
+ assert.equal(get('usersPanel').hidden,true);assert.equal(get('managementPanel').hidden,true);
+ vm.runInContext('AccountsUI.setView("accounts")',context);assert.equal(get('usersPanel').hidden,false);assert.equal(get('monitor').hidden,true);
+ vm.runInContext('AccountsUI.setView("manage")',context);assert.equal(get('managementPanel').hidden,false);assert.equal(get('usersPanel').hidden,true);
  assert.match(get('usersList').textContent,/admin — Administrator/);
  const login=calls.find(c=>c.path==='/api/login');assert.equal(login.options.credentials,'same-origin');assert.equal(login.options.headers['X-VPN-Request'],'1');
  await listeners.pointerdown();const count=calls.filter(c=>c.path==='/api/activity').length;
@@ -78,6 +81,7 @@ async function main(){
  get('username').value='admin';get('password').value='fixture passphrase';await get('signIn').onclick();
  await get('signOut').onclick();assert.equal(logged,false);assert.equal(get('clear').clicked,true);
  assert.equal(vm.runInContext('AccountsUI.canRead()',context),false);
+ vm.runInContext('AccountsUI.setView("manage")',context);assert.equal(get('managementPanel').hidden,true);assert.equal(get('manageTab').hidden,true);
  const logout=calls.find(c=>c.path==='/api/logout');assert.equal(logout.options.headers['X-CSRF-Token'],user.csrf);
  assert.ok(!fs.readFileSync(require.resolve('../dashboard/login.js'),'utf8').match(/localStorage|sessionStorage|document\.cookie/));
  console.log('Login, logout, activity debounce, CSRF and no browser credential persistence passed.');
