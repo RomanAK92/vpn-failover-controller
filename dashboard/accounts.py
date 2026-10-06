@@ -40,6 +40,9 @@ def password_policy(password):
 
 
 def origin_policy(origin):
+    if (not isinstance(origin, str) or len(origin) > 300
+        or any(ord(c) <= 32 or ord(c) > 126 for c in origin)):
+        raise ValueError('Use one exact ASCII origin without whitespace.')
     url = urlsplit(origin)
     if url.username or url.password or url.path or url.query or url.fragment or not url.hostname:
         raise ValueError('Use an exact origin such as https://vpn.example.org, without a path.')
@@ -52,6 +55,8 @@ def origin_policy(origin):
     if url.scheme != 'https' and not (url.scheme == 'http' and local):
         raise ValueError('Remote browser access requires HTTPS.')
     _ = url.port  # Validate the port syntax.
+    if origin != url.scheme+'://'+url.netloc:
+        raise ValueError('Use the normalized exact origin without ignored characters.')
     return url.scheme == 'https'
 
 
@@ -107,7 +112,9 @@ class Accounts:
         self.db.close()
 
     def audit(self, event, user=None):
-        if event not in ('account-created', 'account-updated', 'login-rejected', 'login-blocked', 'login-success', 'logout'):
+        if event not in ('account-created', 'account-updated', 'login-rejected', 'login-blocked', 'login-success', 'logout',
+                         'vpn-prepare-requested', 'vpn-apply-requested', 'vpn-confirm-requested', 'vpn-revert-requested',
+                         'vpn-operate-requested', 'vpn-automatic-requested'):
             raise ValueError('Unrecognized audit event.')
         self.db.execute('INSERT INTO audit(time,event,user) VALUES(?,?,?)', (self.clock(), event, user))
         self.db.execute('DELETE FROM audit WHERE id NOT IN (SELECT id FROM audit ORDER BY id DESC LIMIT 1000)')
@@ -206,18 +213,30 @@ class Accounts:
         with self.lock:
             return [{'username': name, 'role': role} for name, role in self.db.execute('SELECT name,role FROM users ORDER BY name')]
 
-    def change_user(self, sid, csrf, current_password, name, password, role, replace=False):
+    def change_user(self, sid, csrf, current_password, name, password, role, replace=False, address='127.0.0.1'):
         if type(replace) is not bool:
             raise ValueError('Replace must be an explicit boolean.')
         with self.lock:
             current = self.session(sid, csrf, admin=True)
-            temporary_sid, verified = self.login(current['username'], current_password, '127.0.0.1')
+            temporary_sid, verified = self.login(current['username'], current_password, address)
             self.logout(temporary_sid, verified['csrf'])
             try:
                 self.put_user(name, password, role, replace)
             except ValueError as exc:
                 raise AuthError(400, str(exc)) from None
             return {'username': name, 'role': role, 'reauthenticate': name == current['username']}
+
+    def reauthenticate(self, sid, csrf, password, address):
+        """Use the same persistent attempt limits as login for sensitive actions."""
+        with self.lock:
+            current = self.session(sid, csrf, admin=True)
+            temporary, verified = self.login(current['username'], password, address)
+            self.logout(temporary, verified['csrf'])
+            return self.session(sid, csrf, admin=True)
+
+    def record_operation(self, event, username):
+        with self.lock, self.db:
+            self.audit(event, username)
 
     def events(self, sid):
         self.session(sid, admin=True, touch=False)
