@@ -2,3 +2,6 @@
 
 /* Account fields align even when a label wraps; confirmations use their own row. */
 .account-fields{align-items:end}.account-fields input,.account-fields select{height:44px}.account-actions{display:flex;align-items:center;flex-wrap:wrap;gap:16px;margin-top:18px}.checkbox{display:flex;align-items:center;gap:8px}.checkbox input[type=checkbox]{width:18px;height:18px;flex:0 0 18px;margin:0}.account-actions button{margin:0}.account-actions p:empty{display:none}
+
+/* Keep approximately ten log lines visible; older events remain keyboard-scrollable. */
+.security-log{line-height:1.55;max-height:calc(15.5em + 36px);overflow-y:auto;overscroll-behavior:contain}.security-log:focus-visible{outline:2px solid #235740;outline-offset:2px}
