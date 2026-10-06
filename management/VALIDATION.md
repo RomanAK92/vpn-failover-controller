@@ -361,3 +361,13 @@ not a substitute for the pending human Apply/confirmation check.
 
 Only the test web's frontend assets were updated. Existing accounts/session rows
 were compared unchanged and the VPN engine stayed healthy without restart.
+
+The user later showed the pending countdown in the browser. Confirmation was
+not completed before expiry; the engine was independently observed healthy and
+rolled back. The expired four-hour local SSH preview forward was restored without
+changing server networking. To avoid scrolling to a distant password field during
+the countdown, live Apply/Confirm/Return and temporary controls now have adjacent
+current-passphrase inputs. Regressions verify the correct input is used, empty
+requests are blocked and all three management secret fields clear after sensitive
+actions or session loss. Timer values and backend authorization were unchanged.
+Actual human confirmation remains pending.
