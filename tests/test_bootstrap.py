@@ -90,9 +90,31 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn('./data/management:/management:rw', compose)
         self.assertIn('./data/control:/control:ro', compose)
         self.assertNotIn('--enable-test-apply', compose)
+        self.assertNotIn('--enable-managed-changes', compose)
         self.assertNotIn('docker.sock', compose)
         self.assertNotIn('privileged:', compose)
         self.assertNotIn('tmpfs', compose.split('./data/management')[0].split('volumes:')[-1])
+
+    def test_live_opt_in_requires_persistent_manager_and_strict_boolean(self):
+        for value in (True,'true',1):
+            with self.assertRaises(ValueError):bootstrap.compose(False,value)
+        with self.assertRaises(ValueError):bootstrap.compose(True,'true')
+        self.assertNotIn('--enable-managed-changes',bootstrap.compose(True))
+        self.assertEqual(bootstrap.compose(True,True).count('--enable-managed-changes'),2)
+
+    @unittest.skipUnless(hasattr(os,'geteuid') and os.geteuid()==0,'Actual isolated root-owned preparation')
+    def test_explicit_live_install_prepares_paired_gates_without_starting_services(self):
+        config=json.loads((self.config/'controller.json').read_text())
+        address=str(next(__import__('ipaddress').ip_network(config['subnet']).hosts()))
+        dest=self.root/'opt-in'
+        result=bootstrap.prepare(dest,self.config,'admin','synthetic-unit-password',managed=True,
+            application={'address':address,'port':80},enable_managed_changes=True)
+        self.assertFalse(result['started'])
+        self.assertTrue(json.loads((dest/'installation.json').read_text())['live_apply_enabled'])
+        compose=(dest/'compose.yaml').read_text()
+        self.assertEqual(compose.count('--enable-managed-changes'),2)
+        self.assertNotIn('--enable-test-apply',compose)
+        self.assertNotIn('privileged:',compose);self.assertNotIn('docker.sock',compose)
 
     @unittest.skipUnless(hasattr(os, 'geteuid') and os.geteuid() == 0, 'Actual root-owned Linux generation preparation')
     def test_bad_application_probe_discards_only_own_unpublished_stage(self):
