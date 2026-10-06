@@ -17,6 +17,8 @@
   }
   function buttons() {
     const pending = status?.transaction?.change;
+    el('liveStepTitle').textContent=pending?.phase==='pending'?'3. Keep or undo this change':'2. Apply the reviewed settings';
+    el('confirmGeneration').hidden=pending?.phase!=='pending';el('revertGeneration').hidden=pending?.phase!=='pending';
     el('applyGeneration').disabled = busy || !AccountsUI.testApplyEnabled()
       || !status?.live_apply_enabled || !status?.ready || previewed !== el('generationId').value.trim()
       || pending?.phase === 'pending' || pending?.phase === 'rollback-requested';
