@@ -284,4 +284,7 @@ Only the owned isolated web container was replaced. A root-private account
 database backup preceded the schema upgrade; existing account hashes, revisions
 and session rows were compared unchanged afterward. The VPN engine was not
 restarted and its health/default route remained intact. No real user was disabled
-or deleted by this acceptance. Actual human lifecycle review remains pending.
+or deleted by this acceptance. The user subsequently reported that the account
+controls and corrected field/checkbox layout passed their browser review. This
+confirmation covers that part only; profile and live VPN-control review remain
+separate human acceptance checks.
