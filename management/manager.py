@@ -1,6 +1,9 @@
 """Isolated management-engine acceptance service. Not a released distribution.
 
-Default socket permits preparation/preview only. --enable-test-apply is for
+Default socket permits preparation/preview only. --enable-managed-changes is an
+explicit operator opt-in retaining all readiness and rollback checks. This
+development candidate still requires isolated acceptance before promotion.
+--enable-test-apply is for
 owned disposable acceptance topology, never a critical/shared production host.
 Full crash/storage/browser/upgrade/recovery gates remain before promotion.
 """
@@ -96,17 +99,19 @@ def main():
     parser.add_argument('--management-dir', default='/management')
     parser.add_argument('--socket-dir', default='/control')
     parser.add_argument('--application-file', required=True)
-    parser.add_argument('--enable-test-apply', action='store_true')
+    controls=parser.add_mutually_exclusive_group()
+    controls.add_argument('--enable-test-apply', action='store_true', help='Owned disposable acceptance only')
+    controls.add_argument('--enable-managed-changes', action='store_true', help='Explicit operator opt-in; retain all review, readiness and rollback checks')
     args = parser.parse_args()
     if sys.platform != 'linux' or os.geteuid() != 0:
-        parser.error('Use the separate isolated Linux engine acceptance container.')
+        parser.error('The managed engine requires its root-owned Linux container.')
     os.umask(0o077)
     application = pathlib.Path(args.application_file)
     if (application.is_symlink() or not application.is_file() or application.stat().st_size > 4096
         or application.stat().st_mode & 0o077 or application.stat().st_uid != 0):
         parser.error('Use an initialized private application readiness file.')
     settings = json.loads(application.read_text())
-    store = ManagedBroker(args.management_dir, '/app/doctor.py', enable_test_apply=args.enable_test_apply)
+    store = ManagedBroker(args.management_dir, '/app/doctor.py', enable_test_apply=args.enable_test_apply or args.enable_managed_changes)
     boot = pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()
     journal = Journal(args.management_dir, boot)
     driver = EngineDriver(application=settings)
