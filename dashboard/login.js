@@ -1,6 +1,7 @@
 'use strict';
 const AccountsUI = (() => {
   let mode = 'local', user = null, lastActivity = 0, draftsEnabled = false, controlEnabled = false, testApply = false;
+  let selectedView=typeof location!=='undefined'&&location.hash==='#managementPanel'?'manage':'monitor';
   const element = id => document.getElementById(id);
   function accountMessage(message) {
     element('usersMessage').textContent=message;
@@ -24,12 +25,20 @@ const AccountsUI = (() => {
     user=null;render(message);element('clear').click();
   }
   function render(message = '') {
+    const admin=!!user&&user.role==='admin';
+    const view=!admin&&['manage','accounts'].includes(selectedView)?'monitor':selectedView;
+    element('monitor').hidden=view!=='monitor';element('setup').hidden=view!=='setup';
+    element('manageTab').hidden=!admin||!controlEnabled;element('accountsTab').hidden=!admin;
+    for(const [id,name] of [['monitorTab','monitor'],['setupTab','setup'],['manageTab','manage'],['accountsTab','accounts']]){
+      element(id).classList?.toggle('selected',view===name);element(id).setAttribute?.('aria-pressed',String(view===name));
+    }
     element('accountPanel').hidden = mode !== 'accounts' && mode !== 'unavailable';
+    element('accountHeading').textContent=user?'Signed in':'Sign in';
     element('loginFields').hidden = !!user;
     element('signOut').hidden = !user;
-    element('usersPanel').hidden = !user || user.role !== 'admin';
-    if(element('draftPanel'))element('draftPanel').hidden = !draftsEnabled || !user || user.role !== 'admin';
-    if(element('managementPanel'))element('managementPanel').hidden = !controlEnabled || !user || user.role !== 'admin';
+    element('usersPanel').hidden = !admin||view!=='accounts';
+    if(element('draftPanel'))element('draftPanel').hidden = !draftsEnabled||!admin||view!=='setup';
+    if(element('managementPanel'))element('managementPanel').hidden = !controlEnabled||!admin||view!=='manage';
     if(!user&&element('managementPassword')){element('managementPassword').value='';element('managementStatus').textContent='';element('generationId').value='';element('managedDraft').textContent='';}
     if(!user&&element('liveActionPassword'))element('liveActionPassword').value='';
     if(!user&&element('operationPassword'))element('operationPassword').value='';
@@ -128,7 +137,7 @@ const AccountsUI = (() => {
   }
   document.addEventListener('pointerdown',activity);
   document.addEventListener('keydown',activity);
-  return {ready,canRead:()=>mode!=='accounts'&&mode!=='unavailable'||!!user,
+  return {ready,setView:name=>{selectedView=['monitor','setup','manage','accounts'].includes(name)?name:'monitor';render();},canRead:()=>mode!=='accounts'&&mode!=='unavailable'||!!user,
     canControl:()=>controlEnabled&&!!user&&user.role==='admin',
     testApplyEnabled:()=>testApply,
     control:async(action,body)=>{if(!controlEnabled||!user||user.role!=='admin')throw new Error('Administrator access required.');return request('/api/control/'+action,body);},
