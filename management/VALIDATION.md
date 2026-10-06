@@ -205,7 +205,65 @@ closed port. Cleanup removed owned resources and retained predecessor logs;
 original lab services and the host default route remained unchanged. This is a
 development-manager upgrade, not migration of an arbitrary existing installation.
 
-Actual host reboot acceptance is being prepared separately; no host reboot pass
-or final full-management stable release is claimed yet. The only actual host
+Actual host reboot acceptance completed below. No final full-management stable
+release is claimed yet. The only actual host
 platform checked here is Ubuntu24.04.4 LTS, kernel6.8.0, Docker29.1.3 and Compose
 2.40.3. Other Linux distributions have not been certified by these results.
+
+### Actual host reboot and copied installation
+
+Frozen80635f5 passed34 persistent preparation checks and an actual isolated host
+reboot (changed boot ID). The unconfirmed generation rolled back; all four paths,
+encrypted Docker application traffic and the persistent account session recovered.
+The original three lab services and host default route were preserved. The
+ownership-checked cleanup removed disposable resources and temporary credentials,
+retaining operational logs and the result. This is host reboot evidence, not a
+new natural IPsec rekey observation.
+
+The first reboot attempt failed because a synthetic test gateway mistook a stale
+VICI socket for a ready IPsec daemon. Recovery correctly remained unacknowledged
+while paths were unhealthy. The simulator now checks an actual daemon response.
+The failure and its operational logs were preserved before scoped cleanup and
+the successful rerun. A concurrent test-service cleanup and a TIME_WAIT port
+preflight also caused earlier HTTPS harness failures; both are retained. Serial
+HTTPS acceptance with server-consistent reuse-address preflight passed13 checks.
+
+The copied dashboard installation kit was built and imported in a restricted
+container: every required control/support/management asset was included. It
+passed and removed its owned image without starting services or changing routes.
+
+### Final private storage, certificate input and optional reporting
+
+Frozen3844b70 passed164 Linux tests,13 certificate-verified HTTPS checks and34
+encrypted traffic/storage checks (all exit0). Certificate preview checks the
+hostname, key pair and expiry before writing anything. A publicly accessible
+source key directory is refused. Filling only a disposable2MiB private tmpfs
+restored the previous working traffic, blocked new changes and did not falsely
+acknowledge the database. Repair and supervised restart reconciled recovery.
+The host disk was not filled; scoped cleanup was verified afterward.
+
+Frozen074f075 passed170 Linux tests. Six new reporter tests cover sanitized
+projection freshness, invalid private fields, thresholds, private file ownership,
+mapping errors and a dummy local HTTP endpoint with redirect refusal. The
+optional reporter image also passed with UID65532, no capabilities, read-only
+root,64MiB memory, exactly two read-only input mounts and no network access.
+Its dry run read fake private tokens and emitted no internal addresses. Image
+cleanup passed. Optional Compose configuration was checked for restrictions and
+absence of published ports; no real notification service was contacted.
+
+Windows completed170 tests (100 passed,70 Linux-only skips); skips are not Linux
+acceptance evidence. Five existing Node suites passed. No browser pass is implied.
+
+Reporting remains optional and disabled by default. Its failure cannot change
+VPN routing. Certificate issuance, browser trust and renewal remain operator
+procedures; automatic renewal and certificate rotation acceptance are not claimed.
+
+### Human review remains a release gate
+
+The owned SSH-only fixture prepares four actual encrypted paths and a reachable
+Docker application for a human. Automated startup/readiness passed; the web binds
+only to server loopback. This is not authenticated browser acceptance. Follow
+BROWSER_ACCEPTANCE.md and record actual observations before promoting management.
+Ordinary Apply gates remain disabled. Compatible changes must retain the existing
+network footprint and begin with all required paths healthy; adding/removing
+interfaces or repairing an unhealthy baseline is outside web Apply scope.
