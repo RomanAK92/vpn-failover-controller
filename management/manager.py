@@ -40,6 +40,7 @@ class ManagedBroker(PrepareBroker):
                 return {'transaction': snapshot, 'selected_generation': self.generations.active(),
                         'running_generation': running,
                         'prepared': self.store.entries(),
+                        'archived': self.store.archived(),
                         'ready': bool(running and self.coordinator.driver.ready(running)),
                         'confirmation_seconds_remaining': max(0, round(snapshot['change']['deadline']-time.monotonic()))
                             if snapshot['change'] and snapshot['change']['phase'] == 'pending' else 0,
@@ -73,6 +74,17 @@ class ManagedBroker(PrepareBroker):
                         return {'requested': self.coordinator.revert(request['change_id']), 'recovery_proven': False}
         if self.storage_fault:
             raise ValueError('Repair private storage and reconcile recovery before any new preparation/change.')
+        if self.coordinator and action in ('archive','restore'):
+            with self.coordinator.lock:
+                with self.coordinator.journal.read_only_snapshot() as state:
+                    change=state['change']
+                    if change and change['phase'] in ('pending','rollback-requested'):
+                        raise ValueError('Finish or recover the current change before archiving.')
+                    if action=='archive' and request.get('generation') in (
+                        state['state']['active'],state['state']['desired'],self.coordinator.driver.generation):
+                        raise ValueError('Confirmed, desired or running settings cannot be archived.')
+                self.generations.retire_completed_pointers(self.coordinator.journal)
+                return super().dispatch(request)
         if self.coordinator and action == 'preview' and set(request) == {'action', 'generation'}:
             with self.coordinator.lock:
                 return {'generation': request['generation'], **self.coordinator.plan(request['generation'])}
