@@ -1,11 +1,11 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const elements=new Map();
-const get=id=>{if(!elements.has(id))elements.set(id,{value:'',hidden:false,disabled:false,textContent:'',click(){this.clicked=true;}});return elements.get(id);};
+const get=id=>{if(!elements.has(id))elements.set(id,{value:'',hidden:false,disabled:false,textContent:'',appendChild(){},click(){this.clicked=true;}});return elements.get(id);};
 const calls=[],listeners={};let logged=false,failSave=false;
 const users=[{username:'admin',role:'admin'}];
 const user={username:'admin',role:'admin',csrf:'fixture-csrf-only'};
-const context={document:{getElementById:get,querySelector:()=>get('unlockBox'),addEventListener:(name,callback)=>listeners[name]=callback},Date,console,fetch:async(path,options={})=>{
+const context={document:{getElementById:get,createElement:()=>({value:'',textContent:''}),querySelector:()=>get('unlockBox'),addEventListener:(name,callback)=>listeners[name]=callback},Date,console,fetch:async(path,options={})=>{
  calls.push({path,options});
  if(path==='/api/auth')return {ok:true,json:async()=>({mode:'accounts'})};
  if(path==='/api/session')return {ok:false,json:async()=>({})};
@@ -19,6 +19,12 @@ const context={document:{getElementById:get,querySelector:()=>get('unlockBox'),a
   return {ok:true,json:async()=>({users})};
  }
  if(path==='/api/security-events')return {ok:true,json:async()=>({events:[]})};
+ if(path.startsWith('/api/accounts/')){
+  const body=JSON.parse(options.body),action=path.split('/').pop();
+  const index=users.findIndex(u=>u.username===body.username);
+  if(action==='delete')users.splice(index,1);else users[index].enabled=action==='enable';
+  return {ok:true,json:async()=>({username:body.username,action,sessions_revoked:true})};
+ }
  if(path==='/api/logout'){logged=false;return {ok:true,json:async()=>({logged_out:true})};}
  return {ok:true,json:async()=>user};
 },refresh:async()=>{}};
@@ -50,6 +56,16 @@ async function main(){
  failSave=true;get('newPassword').value='fixture new passphrase';get('currentPassword').value='fixture current passphrase';
  await get('saveUser').onclick();assert.match(get('usersMessage').textContent,/Management service unavailable/);
  assert.equal(get('saveUser').disabled,false);assert.equal(get('saveUser').textContent,'Save account');
+ get('accountActionUser').value='operator';get('accountAction').value='delete';get('accountActionPassword').value='fixture current passphrase';get('accountActionConfirmed').checked=true;get('accountDeleteName').value='wrong';
+ await get('runAccountAction').onclick();assert.match(get('accountActionMessage').textContent,/exact account name/);
+ assert.ok(!calls.some(c=>c.path==='/api/accounts/delete'));
+ get('accountAction').value='disable';get('accountActionPassword').value='fixture current passphrase';get('accountActionConfirmed').checked=true;
+ await get('runAccountAction').onclick();assert.match(get('accountActionMessage').textContent,/disabled/);assert.match(get('usersList').textContent,/operator — Viewer — Disabled/);
+ get('accountAction').value='enable';get('accountActionPassword').value='fixture current passphrase';get('accountActionConfirmed').checked=true;
+ await get('runAccountAction').onclick();assert.match(get('usersList').textContent,/operator — Viewer — Active/);
+ get('accountAction').value='delete';get('accountActionPassword').value='fixture current passphrase';get('accountActionConfirmed').checked=true;get('accountDeleteName').value='operator';
+ await get('runAccountAction').onclick();assert.match(get('accountActionMessage').textContent,/permanently deleted/);assert.doesNotMatch(get('usersList').textContent,/operator/);
+ assert.equal(get('accountActionPassword').value,'');assert.equal(get('accountDeleteName').value,'');assert.equal(get('accountActionConfirmed').checked,false);
  await get('signOut').onclick();assert.equal(logged,false);assert.equal(get('clear').clicked,true);
  assert.equal(vm.runInContext('AccountsUI.canRead()',context),false);
  const logout=calls.find(c=>c.path==='/api/logout');assert.equal(logout.options.headers['X-CSRF-Token'],user.csrf);
