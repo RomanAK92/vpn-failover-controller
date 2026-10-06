@@ -222,8 +222,12 @@ def serve(args):
         raise ValueError('Private control requires initialized accounts and drafts.')
     control = Control(control_dir) if control_dir else None
     test_apply = getattr(args, 'enable_test_apply', False)
-    if test_apply and not control:
-        raise ValueError('Isolated test controls require a private engine connection.')
+    managed_changes = getattr(args, 'enable_managed_changes', False)
+    if test_apply and managed_changes:
+        raise ValueError('Select either isolated test controls or operator managed controls.')
+    live_changes = test_apply or managed_changes
+    if live_changes and not control:
+        raise ValueError('Live controls require an authenticated private engine connection.')
     monitor = Monitor(args.telemetry, getattr(args, 'history', None))
     def sample():
         while True:
@@ -304,7 +308,7 @@ def serve(args):
                     if action == 'apply' and (type(data['timeout']) is not int or not 60 <= data['timeout'] <= 600):
                         raise AuthError(400, 'Use a confirmation window between 60 and 600 seconds.')
                     user = accounts.session(self.sid(), self.headers.get('X-CSRF-Token', ''), admin=True)
-                    if action in ('apply', 'confirm', 'revert', 'operate', 'automatic') and not test_apply:
+                    if action in ('apply', 'confirm', 'revert', 'operate', 'automatic') and not live_changes:
                         raise AuthError(403, 'Live changes are disabled on this installation.')
                     if 'current_password' in data:
                         user = accounts.reauthenticate(self.sid(), self.headers.get('X-CSRF-Token', ''),
@@ -342,7 +346,8 @@ def serve(args):
             if self.path == '/api/auth':
                 self.json_response(200, {'mode': 'accounts' if accounts else 'token' if token else 'local',
                     'drafts': drafts is not None, 'private_control': control is not None,
-                    'test_apply': bool(control and test_apply)})
+                    'test_apply': bool(control and test_apply),
+                    'live_changes_enabled': bool(control and live_changes)})
                 return
             if self.path.startswith('/api/') and accounts:
                 try:
@@ -447,6 +452,8 @@ if __name__ == '__main__':
     parser.add_argument('--validator', default='/validators/doctor.py', help='Reviewed engine files-only validator')
     parser.add_argument('--control-dir', help='Optional root-owned private engine socket directory')
     parser.add_argument('--trusted-proxy-file', help='Private paired HTTPS ingress proof; direct backend access rejected')
-    parser.add_argument('--enable-test-apply', action='store_true', help='Disposable isolated acceptance only; off by default')
+    controls=parser.add_mutually_exclusive_group()
+    controls.add_argument('--enable-test-apply', action='store_true', help='Disposable isolated acceptance only; off by default')
+    controls.add_argument('--enable-managed-changes', action='store_true', help='Explicit operator opt-in; private authenticated engine required')
     parser.add_argument('--history', help='Optional writable directory for up to 200 observations, retained 30 days')
     serve(parser.parse_args())
