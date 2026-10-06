@@ -152,11 +152,11 @@ def management_stage(stage, config, application):
     return generation
 
 
-def https_stage(stage, settings):
+def validate_https(settings):
+    """Read-only certificate/key checks for preview and preparation."""
     if not isinstance(settings, dict) or set(settings) not in ({'origin', 'bind', 'directory'}, {'origin', 'bind', 'directory','allowed_cidrs'}):
         raise ValueError('Provide an exact HTTPS origin, private bind and certificate directory.')
-    proof=secrets.token_hex(32)
-    conf = render_tls(settings['origin'], settings['bind'], proxy_proof=proof,allowed_cidrs=settings.get('allowed_cidrs',[]))
+    render_tls(settings['origin'], settings['bind'], proxy_proof='0'*64,allowed_cidrs=settings.get('allowed_cidrs',[]))
     source = directory(settings['directory'])
     files = {}
     for name, limit in (('fullchain.pem', 65536), ('privkey.pem', 16384)):
@@ -165,28 +165,34 @@ def https_stage(stage, settings):
             or (name == 'privkey.pem' and (attributes.st_uid != 0 or attributes.st_mode & 0o077))):
             raise ValueError('Use a bounded certificate and root-owned mode0600 private key without symlinks.')
         files[name] = (source/name).read_bytes()
-    tls = stage/'data/tls'; tls.mkdir(mode=0o750)
-    os.chown(tls, 0, 101)
-    for name, data in files.items():
-        (tls/name).write_bytes(data); os.chown(tls/name, 0, 101); (tls/name).chmod(0o640)
     def check(*args):
         result = subprocess.run(['openssl', *args], capture_output=True, stdin=subprocess.DEVNULL, timeout=5)
         if result.returncode: raise ValueError('Certificate validity, name or key check failed.')
         return result.stdout.strip()
-    check('x509','-in',str(tls/'fullchain.pem'),'-noout','-checkend','3600')
+    check('x509','-in',str(source/'fullchain.pem'),'-noout','-checkend','3600')
     hostname = urlsplit(settings['origin']).hostname
     import ipaddress
     try: ipaddress.ip_address(hostname); flag = '-checkip'
     except ValueError: flag = '-checkhost'
-    match = check('x509','-in',str(tls/'fullchain.pem'),'-noout',flag,hostname)
+    match = check('x509','-in',str(source/'fullchain.pem'),'-noout',flag,hostname)
     # OpenSSL x509 reports name mismatches with exit0; require its explicit
     # positive verdict instead of treating successful command execution as a match.
     expected = ('IP ' if flag == '-checkip' else 'Hostname ')+hostname+' does match certificate'
     if match != expected.encode('ascii'):
         raise ValueError('Certificate does not match the requested private HTTPS name.')
-    public_cert=check('x509','-in',str(tls/'fullchain.pem'),'-pubkey','-noout')
-    public_key=check('pkey','-in',str(tls/'privkey.pem'),'-pubout')
+    public_cert=check('x509','-in',str(source/'fullchain.pem'),'-pubkey','-noout')
+    public_key=check('pkey','-in',str(source/'privkey.pem'),'-pubout')
     if public_cert != public_key: raise ValueError('Certificate and private key do not match.')
+    return files
+
+
+def https_stage(stage, settings):
+    files=validate_https(settings)
+    proof=secrets.token_hex(32)
+    conf=render_tls(settings['origin'],settings['bind'],proxy_proof=proof,allowed_cidrs=settings.get('allowed_cidrs',[]))
+    tls=stage/'data/tls';tls.mkdir(mode=0o750);os.chown(tls,0,101)
+    for name,data in files.items():
+        (tls/name).write_bytes(data);os.chown(tls/name,0,101);(tls/name).chmod(0o640)
     conf_path=stage/'data/https.conf'; conf_path.write_text(conf)
     os.chown(conf_path,0,101); conf_path.chmod(0o640)
     proof_path=stage/'data/accounts/ingress.key';proof_path.write_text(proof+'\n')
@@ -316,8 +322,7 @@ def main():
         https = None
         if any((args.https_origin,args.https_bind,args.tls_dir)):
             https = {'origin':args.https_origin,'bind':args.https_bind,'directory':args.tls_dir,'allowed_cidrs':args.https_allow_cidr}
-            render_tls(args.https_origin,args.https_bind,allowed_cidrs=args.https_allow_cidr)
-            directory(args.tls_dir)
+            validate_https(https)
         application = {'address': args.application_address, 'port': args.application_port,
                        'path': args.application_path, 'scheme': args.application_scheme}
         if args.managed:
