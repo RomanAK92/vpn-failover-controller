@@ -1,120 +1,168 @@
-# Guided system preparation (development)
+# Private VPN management system (development)
 
-This prepares the VPN engine, its status mirror and an account-protected web
-interface together. It does not configure your routers or start the VPN.
-Safe live configuration changes and independent rollback are still being built.
-Do not use this development installer to replace a working production service.
+This is a Linux service that keeps a server and its Docker applications connected
+to an office through one to four WireGuard or IPsec tunnels. It is not an internet
+VPN subscription. A gateway administrator must create matching peers and routes.
+The server's public default route stays unchanged.
 
-## 1. Prepare your profiles
+The management branch adds accounts, profile preparation, private drafts,
+reviewed changes, independent rollback, temporary priorities and offline recovery.
+The complete product is still under acceptance testing. Live web changes are
+OFF in ordinary installations. Do not replace a working production service yet.
+See [actual evidence and remaining gates](VALIDATION.md).
 
-In the web page, choose **Prepare profiles**. Enter the office network, reliable
-devices used to check connectivity and your Docker application's network.
-Import one to four supported WireGuard profiles, fill in IPsec settings if needed,
-and put your preferred tunnel first. Download the private configuration package.
-The profile wizard currently works locally in your browser; it does not apply it.
+## What you need
 
-Have the gateway administrator prepare matching peers and return routes first.
-This system connects a Linux server to a private network. It is not a general
-internet VPN service and does not change the server's default route.
+Use a separate Linux test server with Docker Engine, the Compose plugin, Python 3
+and the kernel/network prerequisites described in the root installation guide.
+Have one to four matching gateway profiles, the office subnet, its health-check
+addresses and your Docker application's network ready. Use a reviewed source
+version. Keep private settings outside Git and shared folders.
 
-## 2. Extract on your separate Linux test server
+## Example: two WireGuard connections
 
-Install Docker Engine with its Compose plugin and Python 3 using the official
-distribution instructions. Download this reviewed source version. Keep the
-downloaded credentials outside the repository and outside shared folders.
+1. Open **Prepare profiles**. Enter your office subnet and reliable devices that
+   answer health checks. Enter the application network used by Docker.
+2. Import your first WireGuard profile and give it a readable name, such as
+   Main office. Import the second and call it Backup office.
+3. Put Main office first. Review every address and warning. Unsupported scripts,
+   arbitrary IPsec files and hooks are refused instead of silently discarded.
+4. Download the private package. This contains keys: keep it secret.
+5. On your separate test Linux server, create a root-owned mode0700 directory,
+   extract the package there, and make its files mode0600. Never extract it into
+   the source checkout. Use the same approach for one, three or four connections;
+   IPsec connections use the guided structured fields instead of arbitrary imports.
 
-```sh
-umask 077
-mkdir /root/vpn-settings
-tar -xf /path/to/your/private-package.tar -C /root/vpn-settings
-chmod 600 /root/vpn-settings/*
-python3 management/bootstrap.py --config-dir /root/vpn-settings
-```
+For example, after reviewing the downloaded archive's contents:
 
-The last command only checks settings. If it fails, follow the configuration
-guide and `build/doctor.py --files-only` before continuing. The guided installer
-accepts generated IPsec settings; arbitrary strongSwan configuration imports
-and scripts are not supported. Unsupported features must be reviewed separately.
+~~~sh
+sudo install -d -m 700 /root/vpn-settings
+sudo tar -xf /path/to/private-package.tar -C /root/vpn-settings
+sudo chmod 600 /root/vpn-settings/*
+~~~
 
-## 3. Create the private installation and first administrator
+## Prepare the installation
 
-```sh
-sudo python3 management/bootstrap.py --config-dir /root/vpn-settings --prepare
-```
+Run from your reviewed source checkout. Replace the example application address
+and path with a reliable office endpoint reachable through every tunnel:
 
-It asks for an administrator name and a passphrase of at least 15 characters,
-twice. There is no shared default password. The passphrase is not printed and
-only its salted hash is stored. The command creates `/opt/vpn-system` as a private
-directory. It refuses to overwrite an existing installation.
+~~~sh
+sudo python3 management/bootstrap.py --config-dir /root/vpn-settings \
+  --managed --application-address 192.168.3.10 \
+  --application-port 80 --application-path /health
+~~~
 
-| Directory | Purpose |
+This only validates. Repeat the same command with **--prepare** to create
+/opt/vpn-system and your first administrator account. It asks for a name and a
+passphrase of at least 15 characters. There is no default password. It refuses
+to overwrite an installation, and preparation starts no services or networking.
+HTTP readiness requires a successful response. HTTPS verifies certificates.
+Explicit --application-scheme tcp checks only that a port accepts a connection;
+it does not prove that a login, database query or business transaction works.
+
+| Private folder | What it holds |
 | --- | --- |
-| engine | The reviewed VPN controller code. |
-| web | The web interface and status mirror code. |
-| config | Private tunnel settings and keys, separate from the web interface. |
-| data/runtime | Controller status and runtime files; not served to the browser. |
-| data/telemetry | An allowlisted copy of status for the web page. |
-| data/accounts | Private account hashes, sessions and security events. |
-| data/history | Bounded switching observations. |
-| data/drafts | Up to eight private validated configuration drafts; never active automatically. |
+| engine, web | Reviewed program files. |
+| data/management | Complete settings versions, active selection and rollback journal. |
+| data/control | Restricted local socket; web requests allowed operations here. |
+| data/runtime | Fresh controller status and temporary selection. |
+| data/telemetry, data/history | Sanitized monitoring and bounded history. |
+| data/accounts | Account hashes, sessions and security events. |
+| data/drafts | Up to eight private validated drafts. |
+| tls, proxy | Optional private certificate and HTTPS configuration. |
 
-The web service runs as an unprivileged user and receives no VPN keys, Docker
-socket or network administration capabilities. A separate mirror reads the
-engine's runtime and copies only permitted status fields. It has no networking
-or network administration capabilities. Only the engine manages VPN networking.
+Only the engine can manage VPN networking. The web container has no Docker
+socket, active tunnel keys or network administration capabilities. The mirror
+has no networking. Containers use read-only filesystems and bounded memory.
 
-## 4. Review before starting
+## Review and start only on the test server
 
-```sh
+~~~sh
 cd /opt/vpn-system
-docker compose --project-name vpn-system config
-docker compose --project-name vpn-system build
-docker compose --project-name vpn-system run --rm --no-deps --entrypoint python3 vpn-router /app/doctor.py
-```
+sudo docker compose --project-name vpn-system config
+sudo docker compose --project-name vpn-system build
+sudo docker compose --project-name vpn-system run --rm --no-deps \
+  --entrypoint python3 vpn-router /app/doctor.py
+sudo docker compose --project-name vpn-system up -d
+sudo docker compose --project-name vpn-system ps
+~~~
 
-This checks credentials, kernel tools, reserved routes/interfaces/ports and Docker
-firewall prerequisites without starting the VPN. Resolve errors and warnings.
-Never run alongside another controller that owns the same network resources.
-The network administrator must review forwarding, host firewall and gateway
-return paths. No automatic firewall or DNS changes are performed by preparation.
+Resolve preflight errors before startup. Never run two controllers owning the
+same interfaces, routes or firewall rules. A green container does not replace
+checking your real application. Host reboot, upgrade and supported-host acceptance
+for this combined manager are still release gates.
 
-Startup remains a separate action after review on the isolated test server:
+## Open the page privately
 
-```sh
-docker compose --project-name vpn-system up -d
-docker compose --project-name vpn-system ps
-docker compose --project-name vpn-system logs --tail 100 vpn-router
-```
+Default backend: **127.0.0.1:8787**, accessed through SSH forwarding:
 
-## 5. Open privately
-
-The page listens on `127.0.0.1:8787` on the Linux server. On your own computer,
-use SSH forwarding with your server's actual SSH port:
-
-```sh
+~~~sh
 ssh -p YOUR_SSH_PORT -L 8787:127.0.0.1:8787 YOUR_USER@YOUR_SERVER
-```
+~~~
 
-Keep that connection open, visit `http://127.0.0.1:8787`, and sign in with the
-account you created. The SSH connection encrypts the transport. Remote access
-requires reviewed private binding, firewall rules and trusted HTTPS; see
-`dashboard/ACCOUNTS.md`. The guided distribution currently uses SSH access.
+Keep SSH open and visit http://127.0.0.1:8787. Sign in with your own account.
+Administrators can create viewers, reset accounts and inspect security events.
+Sessions expire; resetting a password revokes the affected account's sessions.
 
-Check that each tunnel and your real applications work. A green container alone
-does not prove application connectivity. The page must mark old telemetry stale.
+For VPN/LAN HTTPS access, add these options during initial preparation:
 
-After preparing and reviewing profiles, an administrator can choose **Save reviewed
-settings as a private draft**. This explicitly transfers the keys to this server.
-The server checks the package using the engine's real files-only validator, saves
-private mode0600 files and returns a summary with hidden keys. Viewers cannot save
-or list drafts. Scripts, path traversal, raw IPsec files and unsupported settings
-are rejected. The store retains at most eight drafts, including interrupted staging;
-private archival/removal and applying drafts are not implemented in this milestone.
+~~~sh
+--https-origin https://vpn.example.org:8443 \
+--https-bind 10.60.0.2 --tls-dir /root/vpn-tls \
+--https-allow-cidr 10.60.0.0/24
+~~~
 
-Stopping with `docker compose stop` leaves the private data on disk. Stopping the
-engine is not a network cleanup or rollback: retained network objects require
-reviewed reconciliation. Do not delete this directory or change layouts as an
-upgrade method. Transactional apply, backup/recovery and upgrades remain release
-gates on `MANAGEMENT_ROADMAP.md`.
+These are examples, not your network settings. Supply a trusted matching
+fullchain.pem and root-private mode0600 privkey.pem. Port **8443** is the example
+HTTPS port. Bind to a specific private/VPN address and explicitly permit client
+networks, each /16 or narrower. Other clients are denied. Host firewall, VPN
+routing, DNS, certificate trust and renewal remain the operator's responsibility.
+Public/wildcard binding is refused. Do not disable certificate verification.
+The proxy overwrites client identity; the paired backend rejects direct requests.
+
+## Drafts, review and recovery
+
+Saving a draft transfers private keys to this authenticated server. It does not
+change traffic. Prepare the saved draft for the engine, or choose previously
+prepared settings, then review the differences. Summaries hide credentials.
+Drafts and prepared versions are capped; archival is not implemented yet.
+
+Ordinary installs deliberately disable Apply. In owned disposable acceptance,
+both engine and web explicitly enable the test gate. An administrator supplies
+their current passphrase for each sensitive action. The engine durably records
+rollback before changing anything. Confirmation is normally due within three
+minutes, and requires fresh tunnel plus application checks. Expiry, watcher
+failure or an unconfirmed restart restores the previous complete settings.
+Unsupported resource-layout changes are refused. Recovery is not marked complete
+until checks pass. See [transaction details](TRANSACTIONS.md).
+
+Temporary preference/maintenance preserves normal failure and recovery thresholds.
+It expires automatically; excluding a tunnel does not stop its health checks.
+Existing application connections can need to reconnect during a switch.
+
+## Encrypted offline backup
+
+Install your distribution-maintained python3-cryptography package. On Debian or
+Ubuntu this is sudo apt install python3-cryptography. Create a root-private backup
+folder outside the repository, then use the reviewed source tools:
+
+~~~sh
+sudo install -d -m 700 /root/vpn-backups
+sudo python3 management/backup.py export --installation /opt/vpn-system \
+  --output /root/vpn-backups/confirmed.vpnbackup
+sudo python3 management/backup.py restore \
+  --input /root/vpn-backups/confirmed.vpnbackup --destination /opt/vpn-restored
+~~~
+
+It asks for an encryption passphrase; keep it separately. Export refuses pending
+changes. Restore requires a NEW directory and NEW administrator. It starts no
+services and cannot overwrite your working installation. This saves confirmed
+VPN settings and readiness, not an entire server: accounts, sessions, TLS,
+application data, old program binaries and logs are excluded. Restore with
+reviewed compatible code, review preflight, and never start two owners together.
+
+Stopping a container is not network cleanup. Do not delete private directories
+or use unreviewed Compose edits as an upgrade. Follow the release gates before
+promoting this development branch.
 
 Prepared by **r.abdulkhalek**.
