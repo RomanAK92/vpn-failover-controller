@@ -8,14 +8,14 @@ network. The web page is one component, not the whole product.
 | --- | --- | --- |
 | Foundation | v0.4.1 released; engine, installation/history foundation. | Existing tags remain unchanged. |
 | Secure accounts | Admin/viewer, hashed passwords/sessions, persistent attempt limits, CSRF, Host/Origin checks, security events. | Actual authenticated browser acceptance. |
-| Private HTTPS | Guided certificate checks, restricted proxy, backend ingress proof, explicit VPN/LAN client allowlist. | Certificate lifecycle, browser acceptance, additional client-network refusal proof. |
-| Guided installation | Preview first; persistent engine, separate mirror and unprivileged web; first administrator. | Combined actual host reboot, reviewed upgrade and supported-host matrix. |
-| Configuration | Local supported profile import, private validated drafts, prepared-version selection and readable review. | Reversible private retention implemented and under real traffic testing; ten manager layouts passed114 checks. Final browser acceptance remains. |
+| Private HTTPS | Certificate preview and private key input checks, restricted proxy, backend ingress proof, real separate private client allow/refusal tests passed. Certificate lifecycle procedure documented. | Actual browser acceptance; issuance/trust/renewal remain operator responsibilities. |
+| Guided installation | Preview first; persistent engine, separate mirror and unprivileged web; first administrator. Actual host reboot and copied installation kit passed. | Browser acceptance. Supported host evidence is Ubuntu24.04.4 only. |
+| Configuration | Local supported profile import, private drafts, readable review, reversible archive/restore and protected recovery generations. Ten layouts passed114 checks. | Final human browser acceptance. |
 | Safe Apply | Restricted root broker, durable journal, independent watcher, complete immutable generations; real confirmed/expired/crash/restart/storage-full acceptance. | Gates stay OFF in ordinary installs until final full-system acceptance. Layout changes remain refused. |
 | Operations | Bounded temporary priority/exclusion, automatic expiry, real encrypted application traffic verified. | Broader interface/accessibility/browser acceptance. |
-| Diagnostics/alerts | Readable tunnel status, switching observations and security events. | Anonymous administrator support export implemented and tested; documented optional alerts remain. |
-| Backup/recovery | Encrypted confirmed-settings export and fresh-install restore, real persistent-storage acceptance. | Full upgrade/reboot/recovery procedure; certificate/account recovery scope documented. |
-| Product acceptance | Four-path encrypted traffic, rollback, storage and web API checks completed on isolated Linux fixtures. | Final-source tests, browser, host/upgrade/reboot gates, documentation and review before stable publication. |
+| Diagnostics/alerts | Readable status/history, anonymous support export and optional restricted Uptime Kuma reporter implemented and tested with fake tokens. | Actual user browser review; real notification delivery requires operator configuration. |
+| Backup/recovery | Encrypted confirmed-settings export and fresh-directory restore, different-source reviewed-manager upgrade, actual host reboot and private storage exhaustion passed. | Arbitrary legacy migrations are not certified; accounts/certificates are outside settings backup. |
+| Product acceptance |170 Linux unit tests;13 HTTPS checks;34 final storage/traffic checks;39 reviewed upgrade checks; actual host reboot passed. Failed runs retained. | Actual human browser review, final source/CI and review before management stable publication. |
 
 ## Release policy
 
