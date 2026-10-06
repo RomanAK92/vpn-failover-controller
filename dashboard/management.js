@@ -85,6 +85,7 @@
     try{const result=await AccountsUI.listDrafts();if(!AccountsUI.canControl())return;el('managedDraft').textContent='';for(const draft of result.drafts){const option=document.createElement('option');option.value=draft.id;option.textContent=draft.label+' ('+draft.paths.length+' roads)';el('managedDraft').append(option);}}
     catch(error){el('managementMessage').textContent=error.message;}
   };
+  el('refreshManagementStatus').onclick=refreshStatus;
   el('prepareGeneration').onclick=()=>action('prepare',{draft:el('managedDraft').value},true);
   el('previewGeneration').onclick=()=>action('preview',{generation:el('generationId').value.trim()});
   el('applyGeneration').onclick=()=>action('apply',{generation:el('generationId').value.trim(),timeout:180},true);
