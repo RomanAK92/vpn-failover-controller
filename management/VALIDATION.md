@@ -288,3 +288,22 @@ or deleted by this acceptance. The user subsequently reported that the account
 controls and corrected field/checkbox layout passed their browser review. This
 confirmation covers that part only; profile and live VPN-control review remain
 separate human acceptance checks.
+
+### Final owned API and application review
+
+On the retained isolated fixture, authenticated draft preparation and compatible
+review preserved active traffic. Apply and confirmation passed with the real
+Docker application. A healthy candidate left unconfirmed for the full180-second
+window rolled back to the confirmed settings and application traffic recovered.
+The helper initially used a forbidden colon in its draft label and was refused
+before changing tunnels; that failure is retained. It later read a nonexistent
+operational status field after the completed rollback checks. Its cleanup
+restored the original settings and default route; that failed run is retained.
+
+Only the remaining operational checks were rerun using the actual controller
+status. Temporary secondary WireGuard selection carried real application traffic;
+normal policy expiry and explicit Return to automatic both restored the primary
+path. The operational rerun exited0, and the original selected settings, healthy
+application and host default route were verified. Normal timers and recovery
+thresholds were unchanged. Prepared compatible review drafts remain private for
+the human review. These are API/traffic results, not completed browser interactions.
