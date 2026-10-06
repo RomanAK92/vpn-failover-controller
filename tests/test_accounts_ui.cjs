@@ -7,7 +7,7 @@ const users=[{username:'admin',role:'admin'}];
 const user={username:'admin',role:'admin',csrf:'fixture-csrf-only'};
 const context={document:{getElementById:get,createElement:()=>({value:'',textContent:''}),querySelector:()=>get('unlockBox'),addEventListener:(name,callback)=>listeners[name]=callback},Date,console,fetch:async(path,options={})=>{
  calls.push({path,options});
- if(path==='/api/auth')return {ok:true,json:async()=>({mode:'accounts'})};
+ if(path==='/api/auth')return {ok:true,json:async()=>({mode:'accounts',private_control:true,live_changes_enabled:true,test_apply:false})};
  if(path==='/api/session')return {ok:false,json:async()=>({})};
  if(path==='/api/login'){logged=true;return {ok:true,json:async()=>user};}
  if(path==='/api/accounts'){
@@ -36,6 +36,8 @@ async function main(){
  get('username').value='admin';get('password').value='fixture passphrase';await get('signIn').onclick();
  assert.equal(get('password').value,'');assert.equal(get('loginFields').hidden,true);
  assert.equal(vm.runInContext('AccountsUI.canRead()',context),true);
+ assert.equal(vm.runInContext('AccountsUI.testApplyEnabled()',context),true);
+ assert.equal(vm.runInContext('AccountsUI.canControl()',context),true);
  assert.match(get('usersList').textContent,/admin — Administrator/);
  const login=calls.find(c=>c.path==='/api/login');assert.equal(login.options.credentials,'same-origin');assert.equal(login.options.headers['X-VPN-Request'],'1');
  await listeners.pointerdown();const count=calls.filter(c=>c.path==='/api/activity').length;
