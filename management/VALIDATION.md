@@ -267,3 +267,21 @@ BROWSER_ACCEPTANCE.md and record actual observations before promoting management
 Ordinary Apply gates remain disabled. Compatible changes must retain the existing
 network footprint and begin with all required paths healthy; adding/removing
 interfaces or repairing an unhealthy baseline is outside web Apply scope.
+
+### Account lifecycle follow-up
+
+Frozen06c51b8 passed176 Linux tests, including real HTTP disable/re-enable/delete,
+CSRF and administrator password checks, immediate session revocation, disabled
+login refusal, explicit typed deletion confirmation and last-active-administrator
+protection. A revoked acting administrator is rechecked atomically before writes.
+Schema1-to2 upgrade preserved an existing account and session. Windows passed25
+account tests and the separately added revocation-race test; all five Node suites
+passed, including account list refresh and lifecycle confirmations. The initial
+Windows upgrade-test cleanup left a test-only SQLite connection open; closing it
+fixed that cleanup failure without weakening the product checks.
+
+Only the owned isolated web container was replaced. A root-private account
+database backup preceded the schema upgrade; existing account hashes, revisions
+and session rows were compared unchanged afterward. The VPN engine was not
+restarted and its health/default route remained intact. No real user was disabled
+or deleted by this acceptance. Actual human lifecycle review remains pending.
