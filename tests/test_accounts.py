@@ -211,5 +211,19 @@ class AccountHTTPTests(unittest.TestCase):
         status,headers,_=self.request('/api/security-events',headers={'Cookie':cookie})
         self.assertEqual(status,200);self.assertEqual(headers['Cache-Control'],'no-store')
 
+    def test_support_download_is_administrator_only_and_has_no_session_or_addresses(self):
+        self.assertEqual(self.request('/api/support')[0],401)
+        viewer,_=self.login('viewer')
+        self.assertEqual(self.request('/api/support',headers={'Cookie':viewer})[0],403)
+        cookie,user=self.login()
+        status,headers,data=self.request('/api/support',headers={'Cookie':cookie})
+        self.assertEqual(status,200)
+        self.assertEqual(headers['Content-Disposition'],'attachment; filename="vpn-support.json"')
+        self.assertEqual(headers['Cache-Control'],'no-store')
+        self.assertFalse(data['available'])
+        self.assertNotIn(user['csrf'],json.dumps(data))
+        self.assertNotIn(PASSWORD,json.dumps(data))
+        self.assertNotIn('127.0.0.1',json.dumps(data))
+
 
 if __name__=='__main__':unittest.main()
