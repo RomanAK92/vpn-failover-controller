@@ -95,6 +95,31 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual(p.read_text(), 'unrelated evidence')
         self.assertEqual(self.pointers.active(), self.previous)
 
+    def test_retirement_requires_confirmed_health_and_preserves_settings_and_foreign_data(self):
+        change=self.journal.begin(self.candidate)
+        self.pointers.pointers(change,self.previous,self.candidate)
+        with self.assertRaises(TransactionError):self.pointers.retire_completed_pointers(self.journal)
+        self.pointers.select(change,self.candidate,self.journal)
+        self.journal.confirm(change,self.candidate,self.journal.snapshot()['state']['revision'],True)
+        foreign=self.root/('recovery-'+'f'*32);foreign.write_text('unrelated evidence')
+        self.assertEqual(self.pointers.retire_completed_pointers(self.journal),1)
+        self.assertEqual(self.pointers.retire_completed_pointers(self.journal),0)
+        self.assertEqual(foreign.read_text(),'unrelated evidence')
+        self.assertTrue((self.root/'generations'/self.previous).is_dir())
+        self.assertTrue((self.root/'generations'/self.candidate).is_dir())
+        self.assertEqual(self.pointers.active(),self.candidate)
+
+    def test_replaced_completed_pointer_is_preserved_and_unacknowledged_recovery_not_retired(self):
+        change=self.journal.begin(self.candidate)
+        self.pointers.pointers(change,self.previous,self.candidate)
+        self.pointers.select(change,self.candidate,self.journal)
+        self.now+=181;self.journal.watch();self.pointers.recover(self.journal)
+        with self.assertRaises(TransactionError):self.pointers.retire_completed_pointers(self.journal)
+        self.journal.restored(self.previous,self.journal.snapshot()['state']['revision'],True)
+        path=self.root/('candidate-'+change);path.write_text('unrelated evidence')
+        with self.assertRaises(TransactionError):self.pointers.retire_completed_pointers(self.journal)
+        self.assertEqual(path.read_text(),'unrelated evidence')
+
 
 if __name__ == '__main__':
     unittest.main()
