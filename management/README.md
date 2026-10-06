@@ -157,6 +157,10 @@ Existing application connections can need to reconnect during a switch.
 
 ## Encrypted offline backup
 
+For HTTPS certificate expiry, reviewed replacement and recovery, see
+[certificate maintenance](CERTIFICATES.md). Renewal is an operator procedure;
+the container does not obtain certificates or disable browser warnings.
+
 Install your distribution-maintained python3-cryptography package. On Debian or
 Ubuntu this is sudo apt install python3-cryptography. Create a root-private backup
 folder outside the repository, then use the reviewed source tools:
