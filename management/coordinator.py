@@ -41,6 +41,7 @@ class ApplyCoordinator:
                 raise TransactionError('The selected baseline is not the confirmed generation.')
             if not self.driver.ready(baseline):
                 raise TransactionError('Prove the current baseline and application healthy before arming a replacement.')
+            self.generations.retire_completed_pointers(self.journal)
             change = self.journal.begin(candidate, timeout)
             snapshot = self.journal.snapshot()
             try:
