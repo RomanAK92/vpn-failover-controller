@@ -70,16 +70,16 @@ def app_mode():
     ThreadingHTTPServer(('0.0.0.0',8080),Handler).serve_forever()
 
 
-def suite(root,keep=False,soak_seconds=0,dashboard=False,management=False,persistent=False,upgrade_from=None,reboot_directory=None):
+def suite(root,keep=False,soak_seconds=0,dashboard=False,management=False,persistent=False,upgrade_from=None,reboot_directory=None,review_directory=None):
     root=pathlib.Path(root).resolve();sys.path.insert(0,str(root/'build'))
     from configuration import normalize
     tag='vpn-release-'+secrets.token_hex(4)
     image=tag+':test';wan=tag+'-wan';appnet=tag+'-app'
     names={'main':tag+'-main','secondary':tag+'-secondary','vpn':tag+'-vpn','app':tag+'-app'}
-    if reboot_directory:
+    if reboot_directory or review_directory:
         import integration_reboot
-        integration_reboot.private_directory(pathlib.Path(reboot_directory))
-    temp=pathlib.Path(tempfile.mkdtemp(prefix=tag+'-',dir=reboot_directory));os.chmod(temp,0o700)
+        integration_reboot.private_directory(pathlib.Path(reboot_directory or review_directory))
+    temp=pathlib.Path(tempfile.mkdtemp(prefix=tag+'-',dir=reboot_directory or review_directory));os.chmod(temp,0o700)
     results=[];containers=[];networks=[];volumes=[];managed=None
     host_default=run('ip','route','show','default')
     def record(name,**detail):
@@ -235,6 +235,15 @@ secrets {{
         record('four-path-startup',active='wg-main')
         if managed:
             integration_managed.start(managed,names,temp,containers,run,record)
+        if review_directory:
+            http_from_app('main')
+            import integration_review
+            integration_review.prepare(managed,names,containers,networks,image,temp,
+                pathlib.Path(review_directory),host_default,run,record)
+            keep=True
+            print(json.dumps({'result':'REVIEW-READY','resources_prefix':tag,
+                'automatic_browser_acceptance':False}),flush=True)
+            return
         deadline=time.monotonic()+30
         while time.monotonic()<deadline:
             diagnostic=sp.run(['docker','exec',names['vpn'],'python3','/app/status.py','--json'],capture_output=True,text=True)
@@ -377,6 +386,7 @@ if __name__=='__main__':
     p.add_argument('--management-persistent',action='store_true',help='Owned disk-bind installation; never fills its filesystem')
     p.add_argument('--upgrade-from',help='Reviewed previous manager source, isolated fixture only; requires persistent mode')
     p.add_argument('--reboot-directory',help='Private isolated-lab fixture directory; retains verified resources for a separately authorized host reboot')
+    p.add_argument('--review-directory',help='Keep only a newly initialized owned fixture for human browser acceptance; SSH loopback access only')
     a=p.parse_args()
     if a.peer:peer_mode(a.peer)
     elif a.app:app_mode()
@@ -384,4 +394,5 @@ if __name__=='__main__':
         if not 0<=a.soak_seconds<=172800:p.error('soak-seconds must be between 0 and 172800')
         if a.upgrade_from and not a.management_persistent:p.error('Upgrade acceptance requires persistent owned storage.')
         if a.reboot_directory and (not a.management_persistent or a.keep):p.error('Reboot preparation requires persistent mode without --keep.')
-        suite(a.root,a.keep,a.soak_seconds,a.dashboard,a.management or a.management_persistent,a.management_persistent,a.upgrade_from,a.reboot_directory)
+        if a.review_directory and (not a.management_persistent or a.keep or a.reboot_directory or a.upgrade_from or a.soak_seconds or a.dashboard):p.error('Human review requires only persistent mode and its dedicated private directory.')
+        suite(a.root,a.keep,a.soak_seconds,a.dashboard,a.management or a.management_persistent,a.management_persistent,a.upgrade_from,a.reboot_directory,a.review_directory)
