@@ -14,7 +14,22 @@ document.getElementById('saveDraft').onclick = async () => {
 document.getElementById('showDrafts').onclick = async () => {
   try {
     const result = await AccountsUI.listDrafts();
+    const choice=document.getElementById('draftArchiveChoice');choice.textContent='';
+    for(const [prefix,items] of [['saved',result.drafts],['archived',result.archived||[]]]){
+      for(const item of items){const option=document.createElement('option');option.value=prefix+':'+item.id;option.textContent=(item.label||'Private draft')+' — '+prefix;choice.append(option);}
+    }
     document.getElementById('draftList').textContent=result.drafts.map(d=>(d.label||'Saved draft')+' — '+(d.paths?.map(p=>p.name+' ('+p.kind+')').join(', ')||'saved settings')).join('\n')||'No saved drafts yet.';
     document.getElementById('draftMessage').textContent='These are saved drafts. None has been applied.';
   }catch(error){document.getElementById('draftMessage').textContent=error.message;}
+};
+for(const action of ['archive','restore'])document.getElementById(action+'Draft').onclick=async()=>{
+  const password=document.getElementById('draftArchivePassword');
+  try{
+    const [state,id]=document.getElementById('draftArchiveChoice').value.split(':');
+    if(!id||state!==(action==='archive'?'saved':'archived'))throw new Error('Choose a '+(action==='archive'?'saved':'archived')+' draft first.');
+    await AccountsUI.archiveDraft(action,id,password.value);
+    await document.getElementById('showDrafts').onclick();
+    document.getElementById('draftMessage').textContent=action==='archive'?'Draft archived privately. It can be restored; traffic was not changed.':'Draft restored for preparation and review. Traffic was not changed.';
+  }catch(error){document.getElementById('draftMessage').textContent=error.message;}
+  finally{password.value='';}
 };
