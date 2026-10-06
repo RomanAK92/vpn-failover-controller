@@ -341,3 +341,23 @@ VPN stayed healthy. No host reboot, production migration or new natural-rekey
 observation is claimed for this flag-only follow-up. Other distributions remain
 unvalidated. Human Apply/confirmation/rollback and profile-import review are still
 separate outstanding release checks.
+
+### Browser reauthentication feedback correction
+
+The user reported being signed out on Apply. The private audit showed rejected
+reauthentication, and the engine remained healthy/confirmed with no new Apply.
+The frontend had treated every401 as session expiry and cleared a passphrase even
+on non-sensitive Review. Review now preserves the unsubmitted field; sensitive
+actions still clear it. Empty sensitive requests are refused locally.
+
+For a rejected current passphrase, the frontend verifies the existing session
+against the session endpoint. Matching username, role and CSRF keep that valid
+session visible with an error; expired/unverifiable sessions still clear private
+fields and administrative controls. The rejected action is never retried or
+authorized. Node regressions passed for both cases. An API-backed strict-HTML-ID
+test against the owned live web verified that a deliberately rejected passphrase
+kept its valid UI session and the transaction identity did not change. This is
+not a substitute for the pending human Apply/confirmation check.
+
+Only the test web's frontend assets were updated. Existing accounts/session rows
+were compared unchanged and the VPN engine stayed healthy without restart.
