@@ -307,3 +307,8 @@ path. The operational rerun exited0, and the original selected settings, healthy
 application and host default route were verified. Normal timers and recovery
 thresholds were unchanged. Prepared compatible review drafts remain private for
 the human review. These are API/traffic results, not completed browser interactions.
+
+The user's subsequent browser screenshot confirmed visible engine readiness,
+confirmed settings and automatic priority. Security history was then bounded
+to approximately ten visible lines with internal scrolling; the retained events
+and their server limits were unchanged. This is a display change, not log deletion.
