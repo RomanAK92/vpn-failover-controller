@@ -215,15 +215,14 @@ reports the choice. Preparation writes matching engine and web flags, records
 the choice privately and still starts no services or networking. Omitting it
 keeps both gates off. The web cannot turn on its own gate or the engine gate.
 
-This mode is under isolated acceptance; it is not a stable production release.
+This mode passed isolated operator acceptance; it is not a stable production release.
 Passwords, administrator permissions, CSRF/Origin checks, private IPC, same-network
 footprint checks, fresh all-path/application readiness, independent rollback and
 confirmation deadlines remain mandatory. Unsupported layout changes are refused.
 Test and operator flags cannot be combined. Existing installations are not edited
 or automatically upgraded by preparation.
 
-After the human-review fixture is released and scoped cleanup completes, test the
-operator mode in a fresh owned namespace with:
+To repeat operator acceptance in a separate fresh owned namespace, use:
 
 ~~~sh
 sudo python3 tests/integration_linux.py --management-persistent --management-normal-controls
