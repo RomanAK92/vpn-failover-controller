@@ -158,6 +158,9 @@ def validate_https(settings):
         raise ValueError('Provide an exact HTTPS origin, private bind and certificate directory.')
     render_tls(settings['origin'], settings['bind'], proxy_proof='0'*64,allowed_cidrs=settings.get('allowed_cidrs',[]))
     source = directory(settings['directory'])
+    attributes=source.stat()
+    if attributes.st_uid!=0 or attributes.st_mode & 0o077:
+        raise ValueError('Certificate input directory requires root ownership and mode0700.')
     files = {}
     for name, limit in (('fullchain.pem', 65536), ('privkey.pem', 16384)):
         attributes = (source/name).lstat()
