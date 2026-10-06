@@ -103,6 +103,17 @@ ssh -p YOUR_SSH_PORT -L 8787:127.0.0.1:8787 YOUR_USER@YOUR_SERVER
 
 Keep SSH open and visit http://127.0.0.1:8787. Sign in with your own account.
 Administrators can create viewers, reset accounts and inspect security events.
+Existing accounts load automatically with Active/Disabled status. Select an
+account under Disable, re-enable or delete, enter your current administrator
+passphrase and tick the confirmation. Permanent deletion additionally requires
+typing the exact account name. All previous sessions are revoked. Disabling
+preserves the account and password hash; re-enabling permits a new sign-in.
+You cannot disable/delete yourself or the last active administrator. A reset
+does not silently re-enable a disabled account. Deletion preserves its security
+history but removes its account and sessions; there is no account recycle bin.
+The private account database upgrades from schema1 to2 transactionally on startup,
+preserving existing accounts and sessions. Old schema1-only web versions cannot
+read the upgraded database; back it up privately before a web-code downgrade.
 Sessions expire; resetting a password revokes the affected account's sessions.
 Administrators can download an anonymous support report. It contains numbered
 paths, protocol/health counters and watchdog status, with no keys, addresses,
