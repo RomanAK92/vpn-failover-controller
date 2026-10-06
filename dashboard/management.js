@@ -72,7 +72,7 @@
     busy=true;buttons();
     try {
       if(sensitive){
-        if(!el('managementPassword').value)throw new Error('Enter your current administrator passphrase again for this action. It is cleared after every request.');
+        if(!el('managementPassword').value)throw new Error('Enter your current administrator passphrase again for this action. It is cleared after every sensitive action.');
         data.current_password=el('managementPassword').value;
       }
       const result=await AccountsUI.control(name,data);
@@ -82,7 +82,7 @@
       else if(name==='preview') {previewed=result.live_footprint_compatible?data.generation:null;el('managementMessage').textContent=[result.live_footprint_compatible?'These settings keep the same reserved network resources.':'These settings need a network layout change, which this Apply driver does not support.',...(result.changes||[]),...(result.reasons||[]),'Preferred order: '+(result.path_order||[]).join(' → '),'Credentials are checked privately. After Apply, the engine must prove all tunnels and the real application work before confirmation.'].join('\n');}
       else el('managementMessage').textContent=name==='apply'?'Change started. Check your real application, re-enter your administrator passphrase, then confirm before the timer ends.':name==='confirm'?'Engine confirmed the change after fresh tunnel and application checks.':name==='operate'?'Temporary preference saved. Check Connection overview to see which road actually carries traffic. Automatic priority returns when the timer ends.':name==='automatic'?'Automatic priority requested. Healthy recovery thresholds still apply.':'Return requested. Wait for recovery health checks.';
     }catch(error){el('managementMessage').textContent=error.message;}
-    finally {el('managementPassword').value='';busy=false;await refreshStatus();}
+    finally {if(sensitive)el('managementPassword').value='';busy=false;await refreshStatus();}
   }
   el('loadManagedDrafts').onclick=async()=>{
     try{const result=await AccountsUI.listDrafts();if(!AccountsUI.canControl())return;el('managedDraft').textContent='';for(const draft of result.drafts){const option=document.createElement('option');option.value=draft.id;option.textContent=draft.label+' ('+draft.paths.length+' roads)';el('managedDraft').append(option);}}
