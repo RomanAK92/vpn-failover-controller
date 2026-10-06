@@ -3,6 +3,8 @@ import importlib.util
 import json
 import os
 import pathlib
+import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -22,6 +24,7 @@ class BootstrapTests(unittest.TestCase):
         self.config.mkdir(mode=0o700)
         c = json.loads((ROOT/'config/layouts/wireguard-2.json').read_text())
         peers = json.loads((ROOT/'config/layouts/wireguard-peers.json').read_text())
+        peers = {p['peer']: peers[p['peer']] for p in c['paths']}
         for p in c['paths']:
             peers[p['peer']]['public_key'] = base64.b64encode(os.urandom(32)).decode()
             key = self.config/('wg-client-'+p['peer']+'.key')
@@ -67,6 +70,66 @@ class BootstrapTests(unittest.TestCase):
                 bootstrap.prepare(dest, self.config, 'admin', 'short')
         self.assertFalse(dest.exists())
         self.assertFalse(any(p.name.startswith('.installation-') for p in self.root.iterdir()))
+
+    @unittest.skipUnless(hasattr(os, 'geteuid') and os.geteuid() == 0, 'Actual root-owned Linux generation preparation')
+    def test_persistent_manager_is_prepared_without_starting_or_enabling_apply(self):
+        dest = self.root/'managed'
+        config = json.loads((self.config/'controller.json').read_text())
+        address = str(next(__import__('ipaddress').ip_network(config['subnet']).hosts()))
+        result = bootstrap.prepare(dest, self.config, 'admin', 'synthetic-unit-password',
+                                   managed=True, application={'address': address, 'port': 80})
+        self.assertFalse(result['started'])
+        manifest = json.loads((dest/'installation.json').read_text())
+        self.assertTrue(manifest['managed']); self.assertFalse(manifest['live_apply_enabled'])
+        private = dest/'data/management'
+        self.assertEqual((private/'active').readlink(), pathlib.Path('generations')/manifest['initial_generation'])
+        self.assertTrue((private/'readiness.json').is_file())
+        self.assertEqual((dest/'data/control').stat().st_mode & 0o7777, 0o2750)
+        self.assertEqual((dest/'data/control').stat().st_gid, 65532)
+        compose = (dest/'compose.yaml').read_text()
+        self.assertIn('./data/management:/management:rw', compose)
+        self.assertIn('./data/control:/control:ro', compose)
+        self.assertNotIn('--enable-test-apply', compose)
+        self.assertNotIn('docker.sock', compose)
+        self.assertNotIn('privileged:', compose)
+        self.assertNotIn('tmpfs', compose.split('./data/management')[0].split('volumes:')[-1])
+
+    @unittest.skipUnless(hasattr(os, 'geteuid') and os.geteuid() == 0, 'Actual root-owned Linux generation preparation')
+    def test_bad_application_probe_discards_only_own_unpublished_stage(self):
+        dest = self.root/'rejected-manager'
+        with self.assertRaises(ValueError):
+            bootstrap.prepare(dest, self.config, 'admin', 'synthetic-unit-password',
+                              managed=True, application={'address': '8.8.8.8', 'port': 80})
+        self.assertFalse(dest.exists())
+        self.assertFalse(any(p.name.startswith('.rejected-manager-') for p in self.root.iterdir()))
+
+    @unittest.skipUnless(hasattr(os, 'geteuid') and os.geteuid() == 0 and shutil.which('openssl'), 'Root OpenSSL certificate fixture')
+    def test_private_https_is_staged_with_matching_certificate_and_restricted_proxy(self):
+        tls = self.root/'certificates'; tls.mkdir(mode=0o700)
+        subprocess.run(['openssl','req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256',
+            '-nodes','-days','2','-subj','/CN=vpn.test.invalid','-addext','subjectAltName=DNS:vpn.test.invalid,IP:127.0.0.1',
+            '-keyout',str(tls/'privkey.pem'),'-out',str(tls/'fullchain.pem')],check=True,capture_output=True)
+        (tls/'privkey.pem').chmod(0o600)
+        settings={'origin':'https://vpn.test.invalid:8443','bind':'127.0.0.1','directory':str(tls)}
+        destination=self.root/'tls-installation'
+        bootstrap.prepare(destination,self.config,'admin','synthetic-unit-password',https=settings)
+        key=destination/'data/tls/privkey.pem'
+        self.assertEqual(key.stat().st_uid,0);self.assertEqual(key.stat().st_gid,101)
+        self.assertEqual(key.stat().st_mode & 0o777,0o640)
+        compose=(destination/'compose.yaml').read_text()
+        self.assertIn('https://vpn.test.invalid:8443',compose)
+        self.assertIn(bootstrap.NGINX_IMAGE,compose)
+        self.assertIn('"/tmp:rw,noexec,nosuid,size=16m,uid=101,gid=101,mode=0700"',compose)
+        self.assertNotIn('0.0.0.0', (destination/'data/https.conf').read_text())
+        rejected=self.root/'bad-tls'
+        with self.assertRaises(ValueError):
+            bootstrap.prepare(rejected,self.config,'admin','synthetic-unit-password',
+                https={**settings,'origin':'https://wrong.test.invalid:8443'})
+        self.assertFalse(rejected.exists())
+        ip_installation=self.root/'ip-tls-installation'
+        bootstrap.prepare(ip_installation,self.config,'admin','synthetic-unit-password',
+            https={**settings,'origin':'https://127.0.0.1:8443'})
+        self.assertTrue(ip_installation.exists())
 
     def test_config_symlink_rejected_before_read(self):
         (self.config/'controller.json').unlink()
