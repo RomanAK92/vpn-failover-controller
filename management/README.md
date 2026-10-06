@@ -89,8 +89,9 @@ sudo docker compose --project-name vpn-system ps
 
 Resolve preflight errors before startup. Never run two controllers owning the
 same interfaces, routes or firewall rules. A green container does not replace
-checking your real application. Host reboot, upgrade and supported-host acceptance
-for this combined manager are still release gates.
+checking your real application. Actual isolated host reboot and a reviewed
+development-manager upgrade passed. Human browser acceptance remains a release
+gate; the tested host is Ubuntu24.04.4.
 
 ## Open the page privately
 
@@ -156,6 +157,10 @@ It expires automatically; excluding a tunnel does not stop its health checks.
 Existing application connections can need to reconnect during a switch.
 
 ## Encrypted offline backup
+
+Optional notifications through an existing Uptime Kuma use a separate unprivileged
+[reporting container](../monitoring/README.md). It reads sanitized telemetry,
+is off by default, and has no VPN-control or key access. Real tokens stay outside Git.
 
 For HTTPS certificate expiry, reviewed replacement and recovery, see
 [certificate maintenance](CERTIFICATES.md). Renewal is an operator procedure;
