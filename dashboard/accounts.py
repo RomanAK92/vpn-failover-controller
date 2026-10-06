@@ -114,7 +114,9 @@ class Accounts:
     def audit(self, event, user=None):
         if event not in ('account-created', 'account-updated', 'login-rejected', 'login-blocked', 'login-success', 'logout',
                          'vpn-prepare-requested', 'vpn-apply-requested', 'vpn-confirm-requested', 'vpn-revert-requested',
-                         'vpn-operate-requested', 'vpn-automatic-requested'):
+                         'vpn-operate-requested', 'vpn-automatic-requested',
+                         'draft-archive-requested','draft-restore-requested',
+                         'vpn-archive-requested','vpn-restore-requested'):
             raise ValueError('Unrecognized audit event.')
         self.db.execute('INSERT INTO audit(time,event,user) VALUES(?,?,?)', (self.clock(), event, user))
         self.db.execute('DELETE FROM audit WHERE id NOT IN (SELECT id FROM audit ORDER BY id DESC LIMIT 1000)')
