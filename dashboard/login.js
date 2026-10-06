@@ -50,7 +50,7 @@ const AccountsUI = (() => {
       const info = await fetch('/api/auth',{cache:'no-store'});
       if (!info.ok) throw new Error();
       const features = await info.json(); mode = features.mode; draftsEnabled = features.drafts === true;
-      controlEnabled = features.private_control === true; testApply = features.test_apply === true;
+      controlEnabled = features.private_control === true; testApply = features.live_changes_enabled === true || features.test_apply === true;
       if (mode === 'accounts') {
         const response = await fetch('/api/session',{credentials:'same-origin',cache:'no-store'});
         if (response.ok) user = await response.json();
