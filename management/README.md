@@ -48,7 +48,7 @@ and path with a reliable office endpoint reachable through every tunnel:
 
 ~~~sh
 sudo python3 management/bootstrap.py --config-dir /root/vpn-settings \
-  --managed --application-address 192.168.3.10 \
+  --managed --application-address 192.168.50.10 \
   --application-port 80 --application-path /health
 ~~~
 
@@ -103,6 +103,10 @@ ssh -p YOUR_SSH_PORT -L 8787:127.0.0.1:8787 YOUR_USER@YOUR_SERVER
 Keep SSH open and visit http://127.0.0.1:8787. Sign in with your own account.
 Administrators can create viewers, reset accounts and inspect security events.
 Sessions expire; resetting a password revokes the affected account's sessions.
+Administrators can download an anonymous support report. It contains numbered
+paths, protocol/health counters and watchdog status, with no keys, addresses,
+path/account names, complete settings or raw logs. Review any other files you
+choose to share separately.
 
 For VPN/LAN HTTPS access, add these options during initial preparation:
 
@@ -114,7 +118,12 @@ For VPN/LAN HTTPS access, add these options during initial preparation:
 
 These are examples, not your network settings. Supply a trusted matching
 fullchain.pem and root-private mode0600 privkey.pem. Port **8443** is the example
-HTTPS port. Bind to a specific private/VPN address and explicitly permit client
+HTTPS port. The bind address must already belong to this Linux host; entering an
+office router's address does not create a local address. Prefer a management
+address whose access remains available during a VPN change. Keep SSH available.
+Review host firewall allowances and VPN return routes separately: preparation
+does not open a firewall or promise access through every failover path.
+Bind to a specific private/VPN address and explicitly permit client
 networks, each /16 or narrower. Other clients are denied. Host firewall, VPN
 routing, DNS, certificate trust and renewal remain the operator's responsibility.
 Public/wildcard binding is refused. Do not disable certificate verification.
@@ -125,7 +134,13 @@ The proxy overwrites client identity; the paired backend rejects direct requests
 Saving a draft transfers private keys to this authenticated server. It does not
 change traffic. Prepare the saved draft for the engine, or choose previously
 prepared settings, then review the differences. Summaries hide credentials.
-Drafts and prepared versions are capped; archival is not implemented yet.
+Eight active drafts/prepared versions and twenty-four private archived copies are
+retained in each store. Choose a saved or archived draft, enter your current
+passphrase, then archive or restore it. Prepared settings have equivalent controls.
+These are reversible moves, not deletion or Apply. The engine refuses to archive
+selected, running or recovery-referenced settings and blocks retention during a
+pending change. Only acknowledged completed staging links are retired; settings
+and operational logs are preserved. Archive-full cases need private offline review.
 
 Ordinary installs deliberately disable Apply. In owned disposable acceptance,
 both engine and web explicitly enable the test gate. An administrator supplies
