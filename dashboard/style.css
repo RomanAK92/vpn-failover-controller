@@ -5,3 +5,6 @@
 
 /* Keep approximately ten log lines visible; older events remain keyboard-scrollable. */
 .security-log{line-height:1.55;max-height:calc(15.5em + 36px);overflow-y:auto;overscroll-behavior:contain}.security-log:focus-visible{outline:2px solid #235740;outline-offset:2px}
+
+/* One task per view, with secondary actions behind labelled disclosure panels. */
+.main-nav{position:sticky;top:0;z-index:10;background:#f3f6f3;padding:12px 0;flex-wrap:wrap;gap:8px;margin:20px 0}.main-nav button{margin:0}.change-step{border-top:1px solid #dce5de;margin-top:20px;padding-top:8px}.advanced{border:1px solid #dce5de;border-radius:10px;padding:14px 16px;margin:20px 0}.advanced summary{cursor:pointer;font-weight:600;color:#235740}.advanced[open]>summary{margin-bottom:18px}#confirmGeneration{background:#235740;color:white}#accountPanel{padding:16px 20px;margin-top:12px}#accountPanel h2{margin-top:0}#managementStatus{border-left:4px solid #537667}#events{max-height:360px;overflow-y:auto}nav button:focus-visible,summary:focus-visible{outline:2px solid #235740;outline-offset:3px}
