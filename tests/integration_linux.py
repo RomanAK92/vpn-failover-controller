@@ -29,10 +29,23 @@ def peer_mode(config):
     run('ip','link','set','peer-ipsec','mtu','1400','up')
     run('ip','route','add',f'10.251.{ident}.2/32','dev','peer-ipsec')
     pathlib.Path('/run/vpn-router').mkdir(exist_ok=True)
+    # This is a dedicated synthetic gateway namespace, not the host VPN runtime.
+    # A disk-bind VICI socket can survive a host reboot; existence is not readiness.
+    socket_path=pathlib.Path('/run/vpn-router/charon.vici')
+    if socket_path.exists():
+        import stat
+        attributes=socket_path.lstat()
+        if not stat.S_ISSOCK(attributes.st_mode) or attributes.st_uid!=0:
+            raise RuntimeError('Unexpected synthetic gateway control object; refusing removal.')
+        socket_path.unlink()
     daemon=sp.Popen(['/usr/lib/ipsec/charon'],stdout=sp.DEVNULL,stderr=sp.DEVNULL)
     for _ in range(100):
-        if pathlib.Path('/run/vpn-router/charon.vici').exists():break
+        check=sp.run(['swanctl','--stats','--uri','unix:///run/vpn-router/charon.vici'],
+            capture_output=True,timeout=3)
+        if check.returncode==0:break
+        if daemon.poll() is not None:raise RuntimeError('Synthetic IPsec daemon exited before readiness.')
         time.sleep(.1)
+    else:raise RuntimeError('Synthetic IPsec daemon did not become ready.')
     run('swanctl','--load-all','--noprompt','--file','/test/swan.conf',
         '--uri','unix:///run/vpn-router/charon.vici')
     from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
