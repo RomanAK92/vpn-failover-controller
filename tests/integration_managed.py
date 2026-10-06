@@ -15,7 +15,8 @@ import sys
 import time
 
 
-def prepare(root, temp, controller, tag, run, containers, volumes, persistent=False):
+def prepare(root, temp, controller, tag, run, containers, volumes, persistent=False, normal_controls=False):
+    if normal_controls and not persistent:raise ValueError('Operator controls require persistent acceptance.')
     sys.path.insert(0, str(root/'management'))
     import bootstrap
     from broker import PrepareBroker, SOCKET_OWNER
@@ -40,8 +41,11 @@ def prepare(root, temp, controller, tag, run, containers, volumes, persistent=Fa
     password = secrets.token_urlsafe(24)
     old_umask = os.umask(0o077)
     try:
-        receipt = bootstrap.prepare(destination, controller, 'admin', password, managed=persistent,
-            application={'address': '10.60.0.60', 'port': 18080, 'path': '/'} if persistent else None)
+        options={'managed':persistent,
+            'application':{'address':'10.60.0.60','port':18080,'path':'/'} if persistent else None}
+        # Reviewed predecessor installers do not have the new opt-in keyword.
+        if normal_controls:options['enable_managed_changes']=True
+        receipt = bootstrap.prepare(destination, controller, 'admin', password, **options)
     finally:
         os.umask(old_umask)
     if not receipt['prepared'] or receipt['started']:
@@ -52,7 +56,7 @@ def prepare(root, temp, controller, tag, run, containers, volumes, persistent=Fa
             'web_image': tag+'-managed-web:test', 'tag': tag, 'driver': True,
             'generation': manifest['initial_generation'], 'management': destination/'data/management',
             'control': destination/'data/control', 'management_mount': str(destination/'data/management'),
-            'bounded_test_storage': False}
+            'bounded_test_storage': False, 'normal_controls': normal_controls}
     driver_directory = destination/'engine/management'
     driver_directory.mkdir(mode=0o755)
     for name in ('driver.py', 'lifecycle.py', 'manager.py', 'operational.py', 'broker.py', 'coordinator.py',
@@ -146,7 +150,7 @@ def start(managed, names, temp, containers, run, record):
           (destination/'data/drafts', '/drafts', 'rw'), (managed['control'], '/control', 'ro')],
          ['python3', 'server.py', '--bind', '127.0.0.1', '--port', '8787', '--auth-dir', '/auth',
           '--origin', 'http://127.0.0.1:8787', '--history', '/history', '--draft-dir', '/drafts',
-          '--control-dir', '/control', '--enable-test-apply'])):
+          '--control-dir', '/control', '--enable-managed-changes' if managed.get('normal_controls') else '--enable-test-apply'])):
         args = ['docker', 'run', '-d', '--name', names[key], '--network', 'none', '--user', user,
                 '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true', '--read-only',
                 '--memory', '128m', '--pids-limit', '64', '--entrypoint', 'python3']
@@ -167,6 +171,11 @@ def start(managed, names, temp, containers, run, record):
         raise RuntimeError('Combined managed login unavailable.')
     managed['cookie'] = login['cookie'].split(';')[0]
     managed['csrf'] = login['body']['csrf']
+    if managed.get('normal_controls'):
+        features=call(managed,names,run,'/api/auth',authenticated=False)['body']
+        if features['test_apply'] or not features['live_changes_enabled']:
+            raise RuntimeError('Operator controls were confused with the isolated test flag.')
+        record('explicit-operator-mode-without-test-flags')
     status = fresh(managed, names, run)
     if managed['password'] in json.dumps(status):
         raise RuntimeError('Telemetry exposed a private credential.')
