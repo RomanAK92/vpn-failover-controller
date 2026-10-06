@@ -154,7 +154,7 @@ selected, running or recovery-referenced settings and blocks retention during a
 pending change. Only acknowledged completed staging links are retired; settings
 and operational logs are preserved. Archive-full cases need private offline review.
 
-Ordinary installs deliberately disable Apply. In owned disposable acceptance,
+Default installs deliberately disable Apply. In owned disposable acceptance,
 both engine and web explicitly enable the test gate. An administrator supplies
 their current passphrase for each sensitive action. The engine durably records
 rollback before changing anything. Confirmation is normally due within three
@@ -203,5 +203,33 @@ promoting this development branch.
 The final human browser checks are listed in
 [browser acceptance](BROWSER_ACCEPTANCE.md). They are a separate release gate;
 automated HTTP tests do not certify that a person can complete the interface.
+
+
+
+## Explicit operator-control opt-in (development acceptance)
+
+A normal managed deployment needs a supported control switch instead of reusing
+the isolated test flag. This candidate adds --enable-managed-changes to the
+bootstrap command, only with --managed and valid application readiness. Preview
+reports the choice. Preparation writes matching engine and web flags, records
+the choice privately and still starts no services or networking. Omitting it
+keeps both gates off. The web cannot turn on its own gate or the engine gate.
+
+This mode is under isolated acceptance; it is not a stable production release.
+Passwords, administrator permissions, CSRF/Origin checks, private IPC, same-network
+footprint checks, fresh all-path/application readiness, independent rollback and
+confirmation deadlines remain mandatory. Unsupported layout changes are refused.
+Test and operator flags cannot be combined. Existing installations are not edited
+or automatically upgraded by preparation.
+
+After the human-review fixture is released and scoped cleanup completes, test the
+operator mode in a fresh owned namespace with:
+
+~~~sh
+sudo python3 tests/integration_linux.py --management-persistent --management-normal-controls
+~~~
+
+This is a test harness, not an installation command. Do not run competing owners
+of the same interfaces or a second fixed-address test fixture over the first.
 
 Prepared by **r.abdulkhalek**.
