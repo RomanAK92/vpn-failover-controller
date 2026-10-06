@@ -35,6 +35,36 @@ class DraftTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    def test_archive_restore_preserves_private_bytes_and_releases_active_capacity(self):
+        files=bundle();item=self.store.save(files,'Old prepared settings')
+        saved=self.store.package(item['id'])
+        result=self.store.move_archive(item['id'])
+        self.assertEqual(result['state'],'archived');self.assertFalse(result['applied'])
+        self.assertEqual(self.store.entries(),[])
+        self.assertEqual(self.store.archived()[0]['id'],item['id'])
+        self.assertEqual(self.store.archive_store().package(item['id']),saved)
+        self.store.move_archive(item['id'],restore=True)
+        self.assertEqual(self.store.package(item['id']),saved)
+        self.assertEqual(self.store.archived(),[])
+
+    def test_archive_symlink_and_tampered_credentials_rejected_without_moving(self):
+        item=self.store.save(bundle(),'Private test')
+        archive=self.root/'.archive';archive.symlink_to(self.root,target_is_directory=True)
+        with self.assertRaises(DraftError):self.store.move_archive(item['id'])
+        self.assertTrue((self.root/item['id']).is_dir());archive.unlink()
+        key=next((self.root/item['id']).glob('*.key'));key.write_text('tampered')
+        with self.assertRaises(DraftError):self.store.move_archive(item['id'])
+        self.assertTrue((self.root/item['id']).is_dir())
+
+    def test_archive_capacity_and_restore_active_capacity_are_bounded(self):
+        first=self.store.save(bundle(),'First');second=self.store.save(bundle(),'Second')
+        with mock.patch('drafts.MAX_ARCHIVED',1):
+            self.store.move_archive(first['id'])
+            with self.assertRaises(DraftError):self.store.move_archive(second['id'])
+        with mock.patch('drafts.MAX_DRAFTS',1):
+            with self.assertRaises(DraftError):self.store.move_archive(first['id'],restore=True)
+        self.assertTrue((self.root/second['id']).is_dir())
+
     def test_persist_private_validated_draft_without_secret_summary(self):
         files = bundle()
         result = self.store.save(files, 'Two office roads')
@@ -146,6 +176,22 @@ class DraftHTTPTests(unittest.TestCase):
         files = bundle(); files['script.sh'] = 'id'
         self.assertEqual(self.request('/api/drafts', {'files': files, 'label': 'Rejected'}, headers)[0], 400)
         self.assertEqual(self.request('/api/apply', {}, headers)[0], 404)
+
+    @unittest.skipUnless(os.name=='posix','Linux archive ownership')
+    def test_archive_restore_requires_admin_csrf_and_fresh_password(self):
+        admin,a=self.login();headers={'Cookie':admin,'X-CSRF-Token':a['csrf']}
+        item=self.request('/api/drafts',{'files':bundle(),'label':'Reversible draft'},headers)[2]
+        body={'id':item['id'],'current_password':test_accounts.PASSWORD}
+        self.assertEqual(self.request('/api/drafts/archive',body,{'Cookie':admin})[0],403)
+        viewer,v=self.login('viewer')
+        self.assertEqual(self.request('/api/drafts/archive',body,{'Cookie':viewer,'X-CSRF-Token':v['csrf']})[0],403)
+        self.assertEqual(self.request('/api/drafts/archive',dict(body,current_password='incorrect'),headers)[0],401)
+        self.assertEqual(self.request('/api/drafts/archive',body,headers)[0],200)
+        listing=self.request('/api/drafts',headers={'Cookie':admin})[2]
+        self.assertTrue(any(p['id']==item['id'] for p in listing['archived']))
+        self.assertFalse(any(p['id']==item['id'] for p in listing['drafts']))
+        self.assertEqual(self.request('/api/drafts/restore',body,headers)[0],200)
+        self.assertFalse(self.request('/api/drafts',headers={'Cookie':admin})[2]['archived'])
 
 
 if __name__ == '__main__':
