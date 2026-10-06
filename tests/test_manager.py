@@ -42,6 +42,16 @@ class ManagerCommandTests(unittest.TestCase):
             with self.assertRaises(ValueError): self.service.dispatch(request)
         self.assertIsNone(self.fixture.journal.snapshot()['change'])
 
+    def test_archive_refuses_confirmed_running_or_pending_changes(self):
+        with self.assertRaises(ValueError):
+            self.service.dispatch({'action':'archive','generation':self.fixture.previous})
+        self.service.enable_test_apply=True
+        self.service.dispatch({'action':'apply','generation':self.fixture.candidate,'timeout':180})
+        for action in ('archive','restore'):
+            with self.assertRaises(ValueError):
+                self.service.dispatch({'action':action,'generation':self.fixture.candidate})
+        self.assertTrue((self.fixture.fixture.root/'generations'/self.fixture.candidate).is_dir())
+
     def test_status_distinguishes_running_selected_and_confirmed_without_keys(self):
         self.service.enable_test_apply = True
         self.service.dispatch({'action': 'apply', 'generation': self.fixture.candidate, 'timeout': 180})
