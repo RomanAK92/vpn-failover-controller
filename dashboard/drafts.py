@@ -13,6 +13,7 @@ import threading
 
 OWNER = 'vpn-private-draft-v1'
 MAX_DRAFTS = 8
+MAX_ARCHIVED = 24
 MAX_BYTES = 65536
 IDENTIFIER = re.compile(r'[a-f0-9]{32}')
 LOCK = threading.Lock()
@@ -36,12 +37,56 @@ class Drafts:
     def entries(self):
         result = []
         for p in self.root.iterdir():
+            if p.name == '.archive':
+                self.archive_store()  # Validate even when not displaying archives.
+                continue
             if p.name.startswith('.pending-'):
                 continue  # Interrupted staging is never an applicable generation.
             if not IDENTIFIER.fullmatch(p.name) or p.is_symlink() or not p.is_dir():
                 raise DraftError('Unexpected data in the draft store; inspect privately.')
             result.append(self.inspect(p.name))
         return result
+
+    def archive_store(self, create=False):
+        root=self.root/'.archive'
+        if not root.exists() and not root.is_symlink():
+            if not create:return None
+            root.mkdir(mode=0o700)
+        attributes=root.lstat()
+        if (not stat.S_ISDIR(attributes.st_mode) or stat.S_ISLNK(attributes.st_mode)
+            or attributes.st_uid != os.geteuid() or attributes.st_mode & 0o077):
+            raise DraftError('Invalid private archive ownership or permissions.')
+        if any(p.name == '.archive' or p.name.startswith('.pending-') for p in root.iterdir()):
+            raise DraftError('Unexpected data inside the private archive.')
+        return Drafts(root,self.validator)
+
+    def archived(self):
+        store=self.archive_store()
+        return [{**item,'state':'archived'} for item in store.entries()] if store else []
+
+    def active_count(self):
+        return sum(p.name != '.archive' for p in self.root.iterdir())
+
+    def move_archive(self, identifier, restore=False):
+        """Reversible private rename only: no deletion, execution or networking."""
+        with LOCK:
+            self.entries()
+            archive=self.archive_store(create=True)
+            archive.entries()
+            source,target=(archive,self) if restore else (self,archive)
+            source.package(identifier)  # Bound file set, modes, hashes and ownership.
+            if restore and self.active_count() >= MAX_DRAFTS:
+                raise DraftError('Archive an unused draft before restoring another.')
+            if not restore and len(archive.entries()) >= MAX_ARCHIVED:
+                raise DraftError('The private archive is full; offline review is required.')
+            if (target.root/identifier).exists() or (target.root/identifier).is_symlink():
+                raise DraftError('Refusing to replace an existing private version.')
+            os.rename(source.root/identifier,target.root/identifier)
+            for directory in (source.root,target.root):
+                fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+                try:os.fsync(fd)
+                finally:os.close(fd)
+            return {'id':identifier,'state':'draft' if restore else 'archived','applied':False}
 
     def inspect(self, identifier):
         if not isinstance(identifier, str) or not IDENTIFIER.fullmatch(identifier):
@@ -143,7 +188,7 @@ class Drafts:
         c, names = self.check_bundle(files)
         with LOCK:
             self.entries()
-            if len(list(self.root.iterdir())) >= MAX_DRAFTS:
+            if self.active_count() >= MAX_DRAFTS:
                 raise DraftError('Eight drafts are retained. Private archival is required before adding more.')
             identifier = secrets.token_hex(16)
             stage = self.root/('.pending-'+identifier)
