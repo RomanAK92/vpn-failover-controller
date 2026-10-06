@@ -61,7 +61,9 @@ def validate_config(source):
     return c, names
 
 
-def compose(managed=False):
+def compose(managed=False, enable_managed_changes=False):
+    if type(enable_managed_changes) is not bool or (enable_managed_changes and not managed):
+        raise ValueError('Managed changes require explicit persistent managed installation.')
     result = '''# vpn-management-bootstrap-v1; engine is the only network administrator.
 services:
   vpn-router:
@@ -112,6 +114,9 @@ services:
             '    volumes: [./data/management:/management:rw, ./data/control:/control:rw, ./data/runtime:/run/vpn-router:rw]')
         result = result.replace('--draft-dir, /drafts]', '--draft-dir, /drafts, --control-dir, /control]')
         result = result.replace('./data/drafts:/drafts:rw]', './data/drafts:/drafts:rw, ./data/control:/control:ro]')
+        if enable_managed_changes:
+            result=result.replace('--application-file, /management/readiness.json]', '--application-file, /management/readiness.json, --enable-managed-changes]')
+            result=result.replace('--control-dir, /control]', '--control-dir, /control, --enable-managed-changes]')
     return result
 
 
@@ -233,9 +238,11 @@ def sync_stage(stage):
         finally: os.close(fd)
 
 
-def prepare(destination, source, username, password, managed=False, application=None, https=None):
+def prepare(destination, source, username, password, managed=False, application=None, https=None, enable_managed_changes=False):
     if sys.platform != 'linux' or os.geteuid() != 0:
         raise ValueError('Preparation requires root on the separate Linux test host.')
+    if type(enable_managed_changes) is not bool or (enable_managed_changes and not managed):
+        raise ValueError('Managed changes require explicit persistent managed installation.')
     dest = directory(destination)
     if dest == ROOT or ROOT in dest.parents:
         raise ValueError('Private installations must be outside the source repository.')
@@ -277,7 +284,7 @@ def prepare(destination, source, username, password, managed=False, application=
             a.close()
         os.chown(stage/'data/accounts/accounts.sqlite3', 65532, 65532)
         generation = management_stage(stage, c, application) if managed else None
-        distribution = compose(managed)
+        distribution = compose(managed, enable_managed_changes)
         if https is not None:
             proxy = https_stage(stage, https)
             distribution = distribution.replace('--origin, http://127.0.0.1:8787,',
@@ -285,7 +292,7 @@ def prepare(destination, source, username, password, managed=False, application=
         (stage/'compose.yaml').write_text(distribution)
         (stage/'compose.yaml').chmod(0o600)
         manifest = {'owner': OWNER, 'paths': len(c['paths']), 'managed': managed,
-            'initial_generation': generation, 'live_apply_enabled': False, 'https_enabled': https is not None,
+            'initial_generation': generation, 'live_apply_enabled': enable_managed_changes, 'https_enabled': https is not None,
             'source_sha256': {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
                               for folder in ('build', 'dashboard', 'management')
                               for p in (ROOT/folder).iterdir() if p.is_file()}}
@@ -310,6 +317,7 @@ def main():
     p.add_argument('--destination', default='/opt/vpn-system')
     p.add_argument('--prepare', action='store_true')
     p.add_argument('--managed', action='store_true', help='Development persistent manager, with live Apply disabled')
+    p.add_argument('--enable-managed-changes',action='store_true',help='Explicit paired engine/web opt-in; requires --managed; preparation still starts nothing')
     p.add_argument('--application-address', help='Reliable office HTTP application readiness IPv4')
     p.add_argument('--application-port', type=int, default=80)
     p.add_argument('--application-path', default='/')
@@ -319,6 +327,8 @@ def main():
     p.add_argument('--tls-dir', help='Private fullchain.pem and mode0600 privkey.pem directory')
     p.add_argument('--https-allow-cidr',action='append',default=[],help='Explicit permitted private/VPN client network, /16 or narrower')
     args = p.parse_args()
+    if args.enable_managed_changes and not args.managed:
+        p.error('--enable-managed-changes requires --managed')
     try:
         destination = directory(args.destination)
         c, _ = validate_config(args.config_dir)
@@ -334,13 +344,14 @@ def main():
             ApplicationProbe(application, c['subnet'])
         if not args.prepare:
             print('Validated '+str(len(c['paths']))+' tunnels. Destination: '+str(destination))
+            print('Live changes: '+('explicitly enabled in the prepared installation' if args.enable_managed_changes else 'disabled by default'))
             print('Preview only. Repeat with sudo and --prepare to create private files and the administrator account.')
             return
         username = input('Administrator username (lowercase, at least 3 characters): ').strip()
         password = getpass.getpass('Administrator passphrase (at least 15 characters): ')
         if password != getpass.getpass('Repeat passphrase: '):
             raise ValueError('Passphrases differ.')
-        print(json.dumps(prepare(destination, args.config_dir, username, password, args.managed, application, https)))
+        print(json.dumps(prepare(destination, args.config_dir, username, password, args.managed, application, https, args.enable_managed_changes)))
         print('Prepared, not running. Review Compose and perform network preflight before startup. No routes or firewall rules changed.')
     except (ValueError, OSError, KeyError, TypeError, subprocess.TimeoutExpired):
         p.exit(1, 'Preparation failed. Check paths, credentials and doctor.py results; no networking was changed.\n')
