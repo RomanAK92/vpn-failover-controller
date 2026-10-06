@@ -111,6 +111,15 @@ class BootstrapTests(unittest.TestCase):
             '-keyout',str(tls/'privkey.pem'),'-out',str(tls/'fullchain.pem')],check=True,capture_output=True)
         (tls/'privkey.pem').chmod(0o600)
         settings={'origin':'https://vpn.test.invalid:8443','bind':'127.0.0.1','directory':str(tls)}
+        preview_destination=self.root/'preview-only'
+        preview_args=[__import__('sys').executable,str(ROOT/'management/bootstrap.py'),
+            '--config-dir',str(self.config),'--destination',str(preview_destination),
+            '--https-bind','127.0.0.1','--tls-dir',str(tls),'--https-origin']
+        good_preview=subprocess.run([*preview_args,settings['origin']],capture_output=True,timeout=20)
+        self.assertEqual(good_preview.returncode,0)
+        bad_preview=subprocess.run([*preview_args,'https://wrong.test.invalid:8443'],capture_output=True,timeout=20)
+        self.assertNotEqual(bad_preview.returncode,0)
+        self.assertFalse(preview_destination.exists())
         destination=self.root/'tls-installation'
         bootstrap.prepare(destination,self.config,'admin','synthetic-unit-password',https=settings)
         key=destination/'data/tls/privkey.pem'
