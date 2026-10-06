@@ -1,65 +1,36 @@
-# Complete VPN management system: implementation plan
+# Full VPN system roadmap
 
-The user approved all roadmap stages on 5 October 2026. Development and disruptive
-checks remain isolated from production. A published source release is separate
-from deploying the system on a critical host.
+Scope: an installable Linux VPN engine with a secure management page. One to four
+WireGuard/IPsec paths connect the server and its Docker applications to a private
+network. The web page is one component, not the whole product.
 
-## Architecture
+| Stage | Current state | Remaining gate |
+| --- | --- | --- |
+| Foundation | v0.4.1 released; engine, installation/history foundation. | Existing tags remain unchanged. |
+| Secure accounts | Admin/viewer, hashed passwords/sessions, persistent attempt limits, CSRF, Host/Origin checks, security events. | Actual authenticated browser acceptance. |
+| Private HTTPS | Guided certificate checks, restricted proxy, backend ingress proof, explicit VPN/LAN client allowlist. | Certificate lifecycle, browser acceptance, additional client-network refusal proof. |
+| Guided installation | Preview first; persistent engine, separate mirror and unprivileged web; first administrator. | Combined actual host reboot, reviewed upgrade and supported-host matrix. |
+| Configuration | Local supported profile import, private validated drafts, prepared-version selection and readable review. | Private retention/archive and broader manager layout acceptance. |
+| Safe Apply | Restricted root broker, durable journal, independent watcher, complete immutable generations; real confirmed/expired/crash/restart/storage-full acceptance. | Gates stay OFF in ordinary installs until final full-system acceptance. Layout changes remain refused. |
+| Operations | Bounded temporary priority/exclusion, automatic expiry, real encrypted application traffic verified. | Broader interface/accessibility/browser acceptance. |
+| Diagnostics/alerts | Readable tunnel status, switching observations and security events. | Sanitized support export and documented optional alerts. |
+| Backup/recovery | Encrypted confirmed-settings export and fresh-install restore, real persistent-storage acceptance. | Full upgrade/reboot/recovery procedure; certificate/account recovery scope documented. |
+| Product acceptance | Four-path encrypted traffic, rollback, storage and web API checks completed on isolated Linux fixtures. | Final-source tests, browser, layout/host/upgrade/reboot gates, documentation and review before stable publication. |
 
-- VPN engine: existing one-to-four-path WireGuard/IPsec controller and supervisor.
-- Web service: minimal permissions; sanitized status, accounts, guided forms.
-- Management broker: a separate owner of a narrowly permitted command channel.
-  No general shell, arbitrary filesystem path or Docker socket in the web service.
-- Independent rollback watchdog: survives a web/controller crash and restores
-  the previous validated configuration if a change is not confirmed healthy.
-- Private data: credentials, account hashes, configuration generations, backups
-  and security events. Keep them outside images, Git and support exports.
+## Release policy
 
-## Gates and order
+PR5 remains a development draft. Test-only root and web flags enable sensitive
+controls exclusively in owned disposable topology. Ordinary guided installations
+cannot apply changes. Passing a traffic test does not certify every Linux server,
+browser or business application. TCP connectivity is weaker than authenticated
+application success; programmers must test real transactions.
 
-1. Installer/history foundation: 25 encrypted checks, six installer checks,
-   six actual reboot checks, 56 Linux tests and final-head CI passed. PR4 is merged at 62c9785ed9d901ff75aa7b085413b0deec588fce; source-release publication remains a separate step.
-2. Secure administration: account-enabled mode, admin/viewer roles, scrypt hashes,
-   persistent attempt blocking, hashed session identifiers, idle/absolute expiry,
-   CSRF and origin checks, Host validation, sanitized bounded security events.
-   Current implementation is under test on branch secure-management; not released.
-   HTTPS ingress and administrator account lifecycle UI are implemented with isolated acceptance. Actual browser acceptance and combined bootstrap/reboot/upgrade checks remain before release.
-3. Guided installation: supported-host checks, first-start account creation,
-   one Compose distribution, explicit SSH/VPN/HTTPS access selection and recovery.
-   Private staging, real files-only validation, first administrator and combined
-   engine/mirror/web preparation are implemented. Isolated account bootstrap and
-   recreation passed eleven checks; guided web/mirror/draft acceptance passed
-   fourteen. Guided distribution currently uses loopback + SSH. Engine startup,
-   combined host reboot, different-version upgrade and supported-host matrix remain.
-4. Configuration management: locally import supported profiles, validate through
-   the actual controller validators, save private drafts, preview priorities and
-   conflicts. No silent stripping of unsupported features.
-   Administrators can save reviewed structured profiles to private drafts; viewers
-   cannot save or list them. Scripts/raw IPsec/path traversal/unknown fields are
-   rejected and the actual engine validator checks every draft. No live apply.
-5. Transactional apply: compare a validated draft with the active configuration;
-   back up the active generation; independently arm rollback before changes;
-   apply through the broker; require fresh controller/application checks and
-   explicit confirmation. Crash/reboot/timeout/disk-full tests must pass first.
-   Existing engine retains network objects on stop: changing resource layouts
-   needs exact owned-object reconciliation, not an arbitrary container restart.
-6. Operational controls: bounded manual selection, enabled paths and maintenance
-   mode; clear effect on traffic and session continuity; automatic recovery.
-7. Diagnostics/alerts: readable path events, application probes, Kuma reporting,
-   sanitized support bundles and administrator security-event view.
-8. Upgrade/recovery: reviewed migration, private backup/restore, downgrade limits,
-   independent rollback, offline recovery without web access.
-9. Product acceptance: clean install, authenticated browser use, one-to-four layouts,
-   custom priority, upgrade/reboot, apply/rollback failure injection and retention.
-   Publish supported Linux versions and hardware/network limits from actual tests.
+No production or live router changes are part of this project work. Test runners
+preserve original lab services, unrelated owned-test sentinel objects and the
+host default route. Failed logs are retained and reported alongside later passes.
+Only verified owned disposable resources and temporary credentials are cleaned.
 
-## What is not yet implemented
-
-Account mode currently adds authenticated monitoring, account administration and
-private drafts, not live VPN administration. Do not claim the complete system
-is ready while the remaining installation gates and stages 5–9 are pending.
-Legacy local/token dashboard mode remains for existing integrations; the new
-account-enabled Compose explicitly selects account mode and fails closed if its
-account storage is absent. It does not silently fall back to anonymous access.
+Publish exact supported hosts and limits from actual evidence, not aspiration.
+Do not promote the complete system while acceptance gates remain unresolved.
 
 Prepared by **r.abdulkhalek**.
