@@ -312,3 +312,32 @@ The user's subsequent browser screenshot confirmed visible engine readiness,
 confirmed settings and automatic priority. Security history was then bounded
 to approximately ten visible lines with internal scrolling; the retained events
 and their server limits were unchanged. This is a display change, not log deletion.
+
+### Explicit operator-control mode
+
+Frozen50a1272 passed178 Linux unit tests, including default-off and explicit paired
+bootstrap gates; preparation still starts nothing. Normal operator mode is
+separate from --enable-test-apply, and the flags are mutually exclusive. The web
+requires initialized accounts, private drafts and its authenticated engine socket.
+The UI recognizes the operator feature without pretending that test mode is on.
+Confirmation now explains that the current passphrase must be re-entered after
+Apply; empty passphrases are refused locally before an authentication request.
+
+Frozen37be9a0 operator acceptance passed34 encrypted checks, exit0, with BOTH
+engine and web using --enable-managed-changes and no test flag. It checked all four
+paths, application traffic/inbound pinned replies, transient loss, fail-closed,
+controller/IPsec recovery, temporary policy expiry and explicit automatic return,
+compatible Apply/confirm, refused unhealthy confirmation, deadline rollback,
+watcher failure, unconfirmed restart, reversible archival and encrypted settings
+restore. The installer/source runtime files were unchanged in this run; only the
+test harness's two private Docker CIDRs were remapped to unused ranges so the
+existing human-review fixture could keep running. Program hashes were compared
+before and after that fixture adaptation.
+
+Scoped cleanup was independently verified: owned containers, networks, images
+and temporary credentials were absent; existing review container identities,
+original lab service states and the host default route remained intact. The review
+VPN stayed healthy. No host reboot, production migration or new natural-rekey
+observation is claimed for this flag-only follow-up. Other distributions remain
+unvalidated. Human Apply/confirmation/rollback and profile-import review are still
+separate outstanding release checks.
