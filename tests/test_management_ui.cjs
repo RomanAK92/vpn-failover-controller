@@ -23,6 +23,10 @@ async function main(){
  status.transaction.change={id:'c'.repeat(32),phase:'pending',candidate:'b'.repeat(32)};status.confirmation_seconds_remaining=80;
  await refresh();assert.equal(el('confirmGeneration').disabled,true);
  status.running_generation='b'.repeat(32);await refresh();assert.equal(el('confirmGeneration').disabled,false);
+ const before=calls.length;await el('confirmGeneration').onclick();assert.equal(calls.length,before);
+ assert.match(el('managementMessage').textContent,/passphrase again/);
+ el('managementPassword').value='fixture-confirm-secret';await el('confirmGeneration').onclick();
+ assert.equal(calls.at(-1).action,'confirm');assert.equal(el('managementPassword').value,'');
  status.confirmation_seconds_remaining=0;await refresh();assert.equal(el('confirmGeneration').disabled,true);
  status.storage_fault=true;status.live_apply_enabled=false;await refresh();assert.equal(el('revertGeneration').disabled,true);
  assert.match(el('managementStatus').textContent,/database recovery is not acknowledged/);
