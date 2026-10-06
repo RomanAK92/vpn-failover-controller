@@ -12,12 +12,15 @@ function show(state){
   $('overall').className='badge '+(activeHealthy?'good':'bad');
   $('statusMessage').textContent=state.message||(available?'Updated '+state.age_seconds+' seconds ago. Public internet uses its existing route.':'Status is stale or supervision failed. Showing last-known values only.');
   if(state.history_warning)$('statusMessage').textContent+=' '+state.history_warning;
+  if(state.operations?.mode==='temporary')$('statusMessage').textContent+=' Temporary preference/maintenance expires in '+state.operations.seconds_remaining+' seconds.';
   $('roads').replaceChildren();
   for(const [i,p] of (state.paths||[]).entries()){
     const card=node('article',undefined,'road');card.append(node('small','PRIORITY '+(i+1)),node('h2',p.name));
-    const classification=!available?'Unknown':p.name===state.active?'Active':p.healthy?'Ready / standby':'Probe failing';
+    const excluded=state.operations?.disabled?.includes(p.name);
+    const classification=!available?'Unknown':excluded?'Temporarily excluded':p.name===state.active?'Active':p.healthy?'Ready / standby':'Probe failing';
     card.append(node('span',classification,'badge '+(available&&p.healthy?'good':'bad')),node('p',p.kind==='wireguard'?'WireGuard':'IPsec'));
     const list=node('ul');for(const [target,ok] of Object.entries(p.probes))list.append(node('li',target+' — '+(!available?'last known: ':'')+(ok?'answered':'no answer')));card.append(list);
+    if(excluded)card.append(node('p','Health checks continue. This road is temporarily excluded from traffic selection.'));
     if(available){const settings=state.settings;const rounds=p.healthy?Math.max(0,settings.recovery_rounds-p.recovery_rounds):Math.max(0,settings.failure_rounds-p.failed_rounds);card.append(node('p',p.name===state.active&&p.healthy?'This road carries selected office traffic.':p.healthy?'Recovery stability: '+rounds+' healthy rounds remaining.':'Failure threshold: '+rounds+' failed rounds remaining.'));}
     $('roads').append(card);
   }
