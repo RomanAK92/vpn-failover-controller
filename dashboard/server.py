@@ -1,4 +1,4 @@
-"""Read-only dashboard. Reads only sanitized telemetry, never VPN credentials."""
+"""Monitoring, accounts and opt-in private drafts; no active VPN or network writes."""
 import argparse
 import collections
 import hmac
@@ -7,6 +7,8 @@ import json
 import math
 import pathlib
 import re
+import os
+import stat
 import threading
 import time
 import sys
@@ -14,6 +16,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from history import History, MAX_AGE
 from accounts import Accounts, AuthError, origin_policy, cookie_token, cookie_header
 from drafts import Drafts, DraftError
+from control import Control, ControlError
 from urllib.parse import urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -63,6 +66,12 @@ def project(status, watchdog):
             **{k: watchdog.get(k) is True for k in ('controller', 'ike', 'integrity')},
         },
     }
+    control = status.get('operations', {})
+    if isinstance(control, dict):
+        result['operations'] = {'mode': 'temporary' if control.get('mode') == 'temporary' else 'automatic',
+            'preferred': control.get('preferred') if control.get('preferred') in names else None,
+            'disabled': [n for n in control.get('disabled', []) if n in names][:4] if isinstance(control.get('disabled', []), list) else [],
+            'seconds_remaining': min(3600, max(0, number(control.get('seconds_remaining'))))}
     for index, path in enumerate(paths):
         if path.get('kind') not in ('wireguard', 'ipsec'):
             raise ValueError('Invalid protocol')
@@ -86,7 +95,7 @@ def project(status, watchdog):
         # Reason is selected by the controller, never arbitrary exception text.
         reasons = ('all paths unavailable', 'initial path selection',
                    'current path failure threshold reached',
-                   'preferred path recovered for stability threshold')
+                   'preferred path recovered for stability threshold', 'operator preference or maintenance')
         result['last_switch'] = {
             'time': number(switch.get('time')),
             **{k: switch.get(k) if switch.get(k) in names else None for k in ('old', 'new')},
@@ -184,6 +193,19 @@ def serve(args):
     if origin and not auth_dir:
         raise ValueError('An origin requires initialized account storage.')
     secure = origin_policy(origin) if auth_dir else False
+    proof_file = getattr(args, 'trusted_proxy_file', None)
+    proof = None
+    if proof_file:
+        path=pathlib.Path(proof_file)
+        if (not auth_dir or not secure or not path.is_absolute()
+            or not ipaddress.ip_address(args.bind).is_loopback or any(p.is_symlink() for p in (path,*path.parents))):
+            raise ValueError('Trusted ingress requires private initialized HTTPS account mode.')
+        attributes=path.lstat()
+        if (not stat.S_ISREG(attributes.st_mode) or attributes.st_nlink!=1 or attributes.st_size>128
+            or attributes.st_uid!=os.geteuid() or attributes.st_mode & 0o077):
+            raise ValueError('Use an owned mode0600 private ingress proof file.')
+        proof=path.read_text().strip()
+        if not re.fullmatch('[a-f0-9]{64}',proof):raise ValueError('Invalid private ingress proof.')
     if auth_dir and not secure and not ipaddress.ip_address(args.bind).is_loopback:
         raise ValueError('Plain HTTP account mode requires a loopback listener.')
     check_binding(args.bind, 'account-mode-requires-origin-check' if auth_dir else token)
@@ -194,6 +216,13 @@ def serve(args):
     if draft_dir and not accounts:
         raise ValueError('Private drafts require initialized account mode.')
     drafts = Drafts(draft_dir, getattr(args, 'validator', '/validators/doctor.py')) if draft_dir else None
+    control_dir = getattr(args, 'control_dir', None)
+    if control_dir and (not accounts or not drafts):
+        raise ValueError('Private control requires initialized accounts and drafts.')
+    control = Control(control_dir) if control_dir else None
+    test_apply = getattr(args, 'enable_test_apply', False)
+    if test_apply and not control:
+        raise ValueError('Isolated test controls require a private engine connection.')
     monitor = Monitor(args.telemetry, getattr(args, 'history', None))
     def sample():
         while True:
@@ -208,6 +237,14 @@ def serve(args):
         def sid(self):
             return cookie_token(self.headers.get('Cookie'), secure)
 
+        def verified_address(self):
+            if not proof:return self.client_address[0]
+            if (not ipaddress.ip_address(self.client_address[0]).is_loopback
+                or not hmac.compare_digest(self.headers.get('X-VPN-Ingress','').encode(),proof.encode())):
+                raise AuthError(403,'Private ingress verification failed.')
+            try:return str(ipaddress.ip_address(self.headers.get('X-VPN-Client','')))
+            except ValueError:raise AuthError(403,'Private ingress verification failed.') from None
+
         def verify_host(self):
             if accounts and self.headers.get('Host', '') != urlsplit(origin).netloc:
                 raise AuthError(403, 'Unexpected dashboard host.')
@@ -220,6 +257,7 @@ def serve(args):
                 self.respond(405, b'No live management endpoint', 'text/plain')
                 return
             try:
+                address=self.verified_address()
                 self.verify_host()
                 if self.headers.get('Origin') != origin or self.headers.get('X-VPN-Request') != '1':
                     raise AuthError(403, 'Request verification failed.')
@@ -233,13 +271,42 @@ def serve(args):
                 if not isinstance(data, dict):
                     raise ValueError()
                 if self.path == '/api/login':
-                    sid, user = accounts.login(data.get('username'), data.get('password'), self.client_address[0])
+                    sid, user = accounts.login(data.get('username'), data.get('password'), address)
                     self.json_response(200, user, {'Set-Cookie': cookie_header(sid, secure)})
                 elif self.path == '/api/accounts':
-                    self.json_response(200, accounts.change_user(self.sid(), self.headers.get('X-CSRF-Token', ''), data.get('current_password'), data.get('username'), data.get('password'), data.get('role'), data.get('replace', False)))
+                    self.json_response(200, accounts.change_user(self.sid(), self.headers.get('X-CSRF-Token', ''), data.get('current_password'), data.get('username'), data.get('password'), data.get('role'), data.get('replace', False), address=address))
                 elif self.path == '/api/drafts' and drafts:
                     accounts.session(self.sid(), self.headers.get('X-CSRF-Token', ''), admin=True)
                     self.json_response(201, drafts.save(data.get('files'), data.get('label')))
+                elif self.path.startswith('/api/control/') and control:
+                    action = self.path[len('/api/control/'):]
+                    allowed = {'prepare': {'draft', 'current_password'},
+                               'preview': {'generation'}, 'apply': {'generation', 'timeout', 'current_password'},
+                               'confirm': {'change_id', 'current_password'},
+                               'revert': {'change_id', 'current_password'},
+                               'operate': {'preferred', 'disabled', 'seconds', 'current_password'},
+                               'automatic': {'current_password'}}
+                    if action not in allowed or set(data) != allowed[action]:
+                        raise AuthError(400, 'Unsupported private operation or fields.')
+                    for key in ('draft', 'generation', 'change_id'):
+                        if key in data and (not isinstance(data[key], str) or not re.fullmatch('[a-f0-9]{32}', data[key])):
+                            raise AuthError(400, 'Select a valid private version.')
+                    if action == 'apply' and (type(data['timeout']) is not int or not 60 <= data['timeout'] <= 600):
+                        raise AuthError(400, 'Use a confirmation window between 60 and 600 seconds.')
+                    user = accounts.session(self.sid(), self.headers.get('X-CSRF-Token', ''), admin=True)
+                    if action in ('apply', 'confirm', 'revert', 'operate', 'automatic') and not test_apply:
+                        raise AuthError(403, 'Live changes are disabled on this installation.')
+                    if 'current_password' in data:
+                        user = accounts.reauthenticate(self.sid(), self.headers.get('X-CSRF-Token', ''),
+                            data['current_password'], address)
+                        accounts.record_operation('vpn-'+action+'-requested', user['username'])
+                    if action == 'prepare':
+                        files = drafts.package(data['draft'])
+                        label = drafts.inspect(data['draft'])['label']
+                        result = control.request('prepare', files=files, label=label)
+                    else:
+                        result = control.request(action, **{k: v for k, v in data.items() if k != 'current_password'})
+                    self.json_response(200, result)
                 elif self.path == '/api/activity':
                     self.json_response(200, accounts.session(self.sid(), self.headers.get('X-CSRF-Token', '')))
                 elif self.path == '/api/logout':
@@ -251,14 +318,21 @@ def serve(args):
                 self.json_response(exc.status, {'error': exc.message})
             except DraftError as exc:
                 self.json_response(400, {'error': str(exc)})
+            except ControlError as exc:
+                self.json_response(503, {'error': str(exc)})
             except (ValueError, TypeError, UnicodeError):
                 self.json_response(400, {'error': 'Invalid request.'})
             except Exception:
-                self.json_response(503, {'error': 'Authentication service unavailable.'})
+                self.json_response(503, {'error': 'Management service unavailable. Check status before retrying.'})
 
         def do_GET(self):
+            try:self.verified_address()
+            except AuthError as exc:
+                self.json_response(exc.status,{'error':exc.message});return
             if self.path == '/api/auth':
-                self.json_response(200, {'mode': 'accounts' if accounts else 'token' if token else 'local', 'drafts': drafts is not None})
+                self.json_response(200, {'mode': 'accounts' if accounts else 'token' if token else 'local',
+                    'drafts': drafts is not None, 'private_control': control is not None,
+                    'test_apply': bool(control and test_apply)})
                 return
             if self.path.startswith('/api/') and accounts:
                 try:
@@ -277,6 +351,10 @@ def serve(args):
                         accounts.session(self.sid(), admin=True, touch=False)
                         self.json_response(200, {'drafts': drafts.entries()})
                         return
+                    if self.path == '/api/control/status' and control:
+                        accounts.session(self.sid(), admin=True, touch=False)
+                        self.json_response(200, control.request('status'))
+                        return
                     if self.path != '/api/status':
                         self.json_response(404, {'error': 'No such operation.'})
                         return
@@ -294,7 +372,7 @@ def serve(args):
                 self.respond(200, json.dumps(monitor.snapshot()).encode(), 'application/json')
                 return
             assets = {'/': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'),
-                      '/profiles.js': ('profiles.js', 'text/javascript'), '/login.js': ('login.js', 'text/javascript'), '/drafts.js': ('drafts.js', 'text/javascript'), '/style.css': ('style.css', 'text/css')}
+                      '/profiles.js': ('profiles.js', 'text/javascript'), '/login.js': ('login.js', 'text/javascript'), '/drafts.js': ('drafts.js', 'text/javascript'), '/management.js': ('management.js', 'text/javascript'), '/style.css': ('style.css', 'text/css')}
             if self.path not in assets:
                 self.respond(404, b'Not found', 'text/plain')
                 return
@@ -352,5 +430,8 @@ if __name__ == '__main__':
     parser.add_argument('--origin', help='Exact browser origin; HTTPS required except loopback SSH access')
     parser.add_argument('--draft-dir', help='Optional private draft storage; no live configuration apply')
     parser.add_argument('--validator', default='/validators/doctor.py', help='Reviewed engine files-only validator')
+    parser.add_argument('--control-dir', help='Optional root-owned private engine socket directory')
+    parser.add_argument('--trusted-proxy-file', help='Private paired HTTPS ingress proof; direct backend access rejected')
+    parser.add_argument('--enable-test-apply', action='store_true', help='Disposable isolated acceptance only; off by default')
     parser.add_argument('--history', help='Optional writable directory for up to 200 observations, retained 30 days')
     serve(parser.parse_args())
