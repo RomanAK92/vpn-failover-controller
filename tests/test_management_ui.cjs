@@ -12,6 +12,7 @@ const context={document:{getElementById:el,createElement:()=>({}),addEventListen
 vm.createContext(context);vm.runInContext(fs.readFileSync(require.resolve('../dashboard/management.js'),'utf8'),context);
 async function main(){
  await new Promise(r=>setImmediate(r));
+ assert.equal(el('confirmGeneration').hidden,true);assert.match(el('liveStepTitle').textContent,/2\. Apply/);
  status.prepared=[{id:'b'.repeat(32),label:'My revised priority'}];await refresh();
  el('preparedGeneration').value='b'.repeat(32);el('preparedGeneration').onchange();
  assert.equal(el('generationId').value,'b'.repeat(32));assert.equal(el('applyGeneration').disabled,true);
@@ -24,6 +25,7 @@ async function main(){
  assert.equal(calls.at(-1).data.timeout,180);
  status.transaction.change={id:'c'.repeat(32),phase:'pending',candidate:'b'.repeat(32)};status.confirmation_seconds_remaining=80;
  await refresh();assert.equal(el('confirmGeneration').disabled,true);
+ assert.equal(el('confirmGeneration').hidden,false);assert.match(el('liveStepTitle').textContent,/3\. Keep/);
  status.running_generation='b'.repeat(32);await refresh();assert.equal(el('confirmGeneration').disabled,false);
  const before=calls.length;await el('confirmGeneration').onclick();assert.equal(calls.length,before);
  assert.match(el('managementMessage').textContent,/passphrase beside these controls/);
