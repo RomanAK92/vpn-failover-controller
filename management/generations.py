@@ -100,6 +100,35 @@ class Generations:
         with journal.recovery_snapshot() as snapshot:
             return self._recover(snapshot)
 
+    def retire_completed_pointers(self, journal):
+        """Remove only exact completed staging links; never settings or logs.
+
+        Pending/unacknowledged recovery pointers must remain allocated. An
+        interrupted retirement is repeatable; complete generations stay private.
+        """
+        with journal.read_only_snapshot() as snapshot:
+            change=snapshot['change']
+            if not change:return 0
+            if change['phase'] not in ('confirmed','rolled-back'):
+                raise TransactionError('Recovery must be acknowledged before retiring staging references.')
+            expected=change['candidate'] if change['phase']=='confirmed' else change['previous']
+            if (snapshot['state']['active']!=expected or snapshot['state']['desired']!=expected
+                or self.active()!=expected):
+                raise TransactionError('Completed recovery references disagree with confirmed selection.')
+            if not GENERATION.fullmatch(change['id']):raise TransactionError('Invalid completed change.')
+            checked=[]
+            for prefix,generation in (('candidate-',change['candidate']),('recovery-',change['previous'])):
+                pointer=self.root/(prefix+change['id'])
+                if pointer.is_symlink():
+                    if os.readlink(pointer)!=self.target(generation):
+                        raise TransactionError('Completed staging reference was replaced; preserve it for review.')
+                    checked.append(pointer)
+                elif pointer.exists():
+                    raise TransactionError('Unrelated staging data must be preserved.')
+            for pointer in checked:pointer.unlink()
+            if checked:self.sync()
+            return len(checked)
+
     def _recover(self, snapshot):
         c = snapshot.get('change')
         if not c or c.get('phase') not in ('pending', 'rollback-requested'):
