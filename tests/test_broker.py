@@ -39,6 +39,19 @@ class BrokerTests(unittest.TestCase):
     def prepare(self, files=None):
         return self.broker.dispatch({'action': 'prepare', 'files': files or self.files, 'label': 'Private test'})
 
+    def test_archive_refuses_active_and_recovery_references_but_preserves_unused_version(self):
+        first=self.prepare()['id'];second=self.prepare()['id']
+        self.broker.generations.initialize(first)
+        with self.assertRaises(ValueError):self.broker.dispatch({'action':'archive','generation':first})
+        pointer=self.root/('recovery-'+'c'*32);pointer.symlink_to('generations/'+second)
+        with self.assertRaises(ValueError):self.broker.dispatch({'action':'archive','generation':second})
+        pointer.unlink()  # Owned fake reference only; no live cleanup.
+        self.broker.dispatch({'action':'archive','generation':second})
+        self.assertEqual(self.broker.generations.active(),first)
+        self.assertEqual(self.broker.dispatch({'action':'status'})['archived'][0]['id'],second)
+        self.broker.dispatch({'action':'restore','generation':second})
+        self.assertEqual(self.broker.load(second),self.files)
+
     def test_private_prepare_and_priority_preview_never_apply(self):
         first = self.prepare()
         self.assertEqual(first['state'], 'prepared')
