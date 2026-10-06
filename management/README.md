@@ -184,4 +184,8 @@ Stopping a container is not network cleanup. Do not delete private directories
 or use unreviewed Compose edits as an upgrade. Follow the release gates before
 promoting this development branch.
 
+The final human browser checks are listed in
+[browser acceptance](BROWSER_ACCEPTANCE.md). They are a separate release gate;
+automated HTTP tests do not certify that a person can complete the interface.
+
 Prepared by **r.abdulkhalek**.
