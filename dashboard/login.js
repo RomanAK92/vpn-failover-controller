@@ -31,6 +31,8 @@ const AccountsUI = (() => {
     if(element('draftPanel'))element('draftPanel').hidden = !draftsEnabled || !user || user.role !== 'admin';
     if(element('managementPanel'))element('managementPanel').hidden = !controlEnabled || !user || user.role !== 'admin';
     if(!user&&element('managementPassword')){element('managementPassword').value='';element('managementStatus').textContent='';element('generationId').value='';element('managedDraft').textContent='';}
+    if(!user&&element('liveActionPassword'))element('liveActionPassword').value='';
+    if(!user&&element('operationPassword'))element('operationPassword').value='';
     if(!user&&element('draftList'))element('draftList').textContent='';
     if(!user&&element('draftArchivePassword'))element('draftArchivePassword').value='';
     if(!user){element('usersList').textContent='';element('securityEvents').textContent='';element('usersMessage').textContent='';element('newPassword').value='';element('currentPassword').value='';}
