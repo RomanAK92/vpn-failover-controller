@@ -1,10 +1,11 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const elements=new Map(),calls=[];
-const get=id=>{if(!elements.has(id))elements.set(id,{value:'',disabled:false,textContent:''});return elements.get(id);};
-const context={document:{getElementById:get},prepared:null,AccountsUI:{
+const get=id=>{if(!elements.has(id))elements.set(id,{value:'',disabled:false,textContent:'',append(){}});return elements.get(id);};
+const context={document:{getElementById:get,createElement:()=>({})},prepared:null,AccountsUI:{
   saveDraft:async(files,label)=>{calls.push({files,label});return {id:'fixture',state:'draft',applied:false};},
-  listDrafts:async()=>({drafts:[{id:'fixture',state:'draft',applied:false}]})}};
+  listDrafts:async()=>({drafts:[{id:'fixture',state:'draft',applied:false}]}),
+  archiveDraft:async(action,id,password)=>{calls.push({action,id,password});return {state:'archived',applied:false};}}};
 vm.createContext(context);vm.runInContext(fs.readFileSync(require.resolve('../dashboard/drafts.js'),'utf8'),context);
 async function main(){
   get('draftLabel').value='Office connection';
@@ -16,6 +17,10 @@ async function main(){
   assert.match(get('draftMessage').textContent,/Active tunnels were not changed/);
   assert.doesNotMatch(get('draftList').textContent,/synthetic fixture only/);
   await get('showDrafts').onclick();assert.match(get('draftMessage').textContent,/None has been applied/);
+  get('draftArchiveChoice').value='archived:fixture';await get('archiveDraft').onclick();assert.equal(calls.length,1);
+  get('draftArchiveChoice').value='saved:fixture';get('draftArchivePassword').value='synthetic only';await get('archiveDraft').onclick();
+  assert.equal(calls.at(-1).action,'archive');assert.equal(get('draftArchivePassword').value,'');
+  assert.match(get('draftMessage').textContent,/traffic was not changed/);
   assert.ok(!fs.readFileSync(require.resolve('../dashboard/drafts.js'),'utf8').match(/localStorage|sessionStorage/));
   console.log('Drafts transfer only after review and explicit save; no live apply or key summary.');
 }
