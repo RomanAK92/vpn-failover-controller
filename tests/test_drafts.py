@@ -53,6 +53,17 @@ class DraftTests(unittest.TestCase):
             self.store.save(files, 'Invalid draft')
         self.assertEqual(list(self.root.iterdir()), [])
 
+    def test_private_transfer_rejects_modified_files_and_unsafe_receipt(self):
+        files = bundle()
+        summary = self.store.save(files, 'Private transfer')
+        self.assertEqual(self.store.package(summary['id']), files)
+        path = self.root/summary['id']/'controller.json'
+        path.write_text('{}')
+        with self.assertRaises(DraftError): self.store.package(summary['id'])
+        path.write_text(files['controller.json'])
+        path.chmod(0o644)
+        with self.assertRaises(DraftError): self.store.package(summary['id'])
+
     def test_no_paths_hooks_raw_ipsec_or_unknown_settings(self):
         for change in ('path', 'hook', 'raw', 'field'):
             files = bundle()
