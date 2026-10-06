@@ -19,3 +19,4 @@ monitoring/kuma.json
 *.sqlite3-*
 private/
 management/local/
+*.vpnbackup
