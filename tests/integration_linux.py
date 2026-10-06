@@ -57,13 +57,16 @@ def app_mode():
     ThreadingHTTPServer(('0.0.0.0',8080),Handler).serve_forever()
 
 
-def suite(root,keep=False,soak_seconds=0,dashboard=False,management=False,persistent=False):
+def suite(root,keep=False,soak_seconds=0,dashboard=False,management=False,persistent=False,upgrade_from=None,reboot_directory=None):
     root=pathlib.Path(root).resolve();sys.path.insert(0,str(root/'build'))
     from configuration import normalize
     tag='vpn-release-'+secrets.token_hex(4)
     image=tag+':test';wan=tag+'-wan';appnet=tag+'-app'
     names={'main':tag+'-main','secondary':tag+'-secondary','vpn':tag+'-vpn','app':tag+'-app'}
-    temp=pathlib.Path(tempfile.mkdtemp(prefix=tag+'-'));os.chmod(temp,0o700)
+    if reboot_directory:
+        import integration_reboot
+        integration_reboot.private_directory(pathlib.Path(reboot_directory))
+    temp=pathlib.Path(tempfile.mkdtemp(prefix=tag+'-',dir=reboot_directory));os.chmod(temp,0o700)
     results=[];containers=[];networks=[];volumes=[];managed=None
     host_default=run('ip','route','show','default')
     def record(name,**detail):
@@ -183,7 +186,8 @@ secrets {{
             if path.is_file():path.chmod(0o600)
         if management:
             import integration_managed
-            managed=integration_managed.prepare(root,temp,controller,tag,run,containers,volumes,persistent=persistent)
+            managed=integration_managed.prepare(pathlib.Path(upgrade_from).resolve() if upgrade_from else root,
+                temp,controller,tag,run,containers,volumes,persistent=persistent)
             controller=managed['destination']/'config'
             runtime=managed['destination']/'data/runtime'
             config=managed['config']
@@ -306,6 +310,11 @@ secrets {{
         record('healthcheck-and-256m-memory-limit')
         if managed:
             integration_managed.finish(managed,names,run,record)
+            if upgrade_from:
+                image=integration_managed.upgrade(managed,names,root,temp,wan,appnet,containers,run,record,image)
+                wait_path('wg-main',timeout=180,all_healthy=True)
+                http_from_app('main')
+                record('different-source-upgrade-restores-all-four-tunnels-and-docker-application')
             integration_managed.transactions(managed,names,run,record,http_from_app)
         if dashboard:
             import integration_dashboard
@@ -323,6 +332,11 @@ secrets {{
             record('continuous-four-path-observation',seconds=soak_seconds,checks=checks)
         verify_container_default()
         if run('ip','route','show','default')!=host_default:raise RuntimeError('Host default route changed during observation')
+        if reboot_directory:
+            import integration_reboot
+            integration_reboot.prepare(managed,names,containers,networks,volumes,image,temp,
+                pathlib.Path(reboot_directory),host_default,run,record)
+            keep=True  # Only after the durable ownership receipt was written.
         print(json.dumps({'result':'PASS','checks':len(results),'resources_prefix':tag}),flush=True)
     except Exception as e:
         print(json.dumps({'result':'FAIL','error':str(e),'passed_checks':len(results),'resources_prefix':tag}),flush=True)
@@ -339,6 +353,8 @@ secrets {{
             sp.run(['docker','image','rm',image],stdout=sp.DEVNULL,stderr=sp.DEVNULL)
             if managed:
                 sp.run(['docker','image','rm',managed['web_image']],stdout=sp.DEVNULL,stderr=sp.DEVNULL)
+                for extra in ('previous_image','upgrade_image'):
+                    if managed.get(extra):sp.run(['docker','image','rm',managed[extra]],stdout=sp.DEVNULL,stderr=sp.DEVNULL)
             shutil.rmtree(temp)
 
 
@@ -346,9 +362,13 @@ if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--root',default=str(pathlib.Path(__file__).resolve().parent.parent))
     p.add_argument('--peer');p.add_argument('--app',action='store_true');p.add_argument('--keep',action='store_true');p.add_argument('--soak-seconds',type=int,default=0);p.add_argument('--dashboard',action='store_true');p.add_argument('--management',action='store_true')
     p.add_argument('--management-persistent',action='store_true',help='Owned disk-bind installation; never fills its filesystem')
+    p.add_argument('--upgrade-from',help='Reviewed previous manager source, isolated fixture only; requires persistent mode')
+    p.add_argument('--reboot-directory',help='Private isolated-lab fixture directory; retains verified resources for a separately authorized host reboot')
     a=p.parse_args()
     if a.peer:peer_mode(a.peer)
     elif a.app:app_mode()
     else:
         if not 0<=a.soak_seconds<=172800:p.error('soak-seconds must be between 0 and 172800')
-        suite(a.root,a.keep,a.soak_seconds,a.dashboard,a.management or a.management_persistent,a.management_persistent)
+        if a.upgrade_from and not a.management_persistent:p.error('Upgrade acceptance requires persistent owned storage.')
+        if a.reboot_directory and (not a.management_persistent or a.keep):p.error('Reboot preparation requires persistent mode without --keep.')
+        suite(a.root,a.keep,a.soak_seconds,a.dashboard,a.management or a.management_persistent,a.management_persistent,a.upgrade_from,a.reboot_directory)
