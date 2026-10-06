@@ -3,8 +3,9 @@ const $=id=>document.getElementById(id);
 let latest=null, prepared=null, roads=[];
 function node(tag, content, cls){const el=document.createElement(tag);if(content!==undefined)el.textContent=content;if(cls)el.className=cls;return el;}
 function invalidate(){prepared=null;$('download').disabled=true;$('preview').textContent='Settings changed. Validate again before downloading.';}
-function tab(which){$('monitor').hidden=which!=='monitor';$('setup').hidden=which!=='setup';$('monitorTab').classList.toggle('selected',which==='monitor');$('setupTab').classList.toggle('selected',which==='setup');}
+function tab(which){if(typeof AccountsUI!=='undefined'&&AccountsUI.setView){AccountsUI.setView(which);return;}$('monitor').hidden=which!=='monitor';$('setup').hidden=which!=='setup';$('monitorTab').classList.toggle('selected',which==='monitor');$('setupTab').classList.toggle('selected',which==='setup');}
 $('monitorTab').onclick=()=>tab('monitor');$('setupTab').onclick=()=>tab('setup');
+$('manageTab').onclick=()=>tab('manage');$('accountsTab').onclick=()=>tab('accounts');
 function show(state){
   latest=state;const available=state.available===true;
   const activeHealthy=available&&(state.paths||[]).some(p=>p.name===state.active&&p.healthy);
