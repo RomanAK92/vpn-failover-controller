@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import socket
 import socketserver
 import stat
@@ -108,7 +109,24 @@ class PrepareBroker:
                 active = self.generations.active() if pointer.exists() or pointer.is_symlink() else None
                 return {'active_generation': active,
                         'prepared': [{**item, 'state': 'prepared'} for item in self.store.entries()],
+                        'archived': self.store.archived(),
                         'live_apply_enabled': False}
+            if action in ('archive', 'restore') and set(request) == {'action', 'generation'}:
+                generation=request['generation']
+                if not isinstance(generation,str) or not IDENTIFIER.fullmatch(generation):
+                    raise ValueError('Invalid generation identifier.')
+                if action == 'archive':
+                    if self.generations.active() == generation:
+                        raise ValueError('Selected settings cannot be archived.')
+                    for pointer in self.generations.root.iterdir():
+                        if pointer.name.startswith(('candidate-','recovery-')):
+                            if not pointer.is_symlink():raise ValueError('Unexpected recovery data; inspect privately.')
+                            target=os.readlink(pointer)
+                            if not re.fullmatch(r'generations/[a-f0-9]{32}',target):
+                                raise ValueError('Invalid recovery reference.')
+                            if target == 'generations/'+generation:
+                                raise ValueError('Recovery settings cannot be archived.')
+                return self.store.move_archive(generation,restore=action=='restore')
             if action == 'prepare' and set(request) == {'action', 'files', 'label'}:
                 result = self.store.save(request['files'], request['label'])
                 return {**result, 'state': 'prepared', 'applied': False}
