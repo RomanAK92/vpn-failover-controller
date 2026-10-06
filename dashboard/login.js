@@ -2,6 +2,17 @@
 const AccountsUI = (() => {
   let mode = 'local', user = null, lastActivity = 0, draftsEnabled = false, controlEnabled = false, testApply = false;
   const element = id => document.getElementById(id);
+  function accountMessage(message) {
+    element('usersMessage').textContent=message;
+  }
+  async function loadAccounts() {
+    if(!user||user.role!=='admin')return;
+    const response=await fetch('/api/accounts',{cache:'no-store',credentials:'same-origin'});
+    if(response.status===401)forgetSession('Session expired. Sign in again.');
+    if(!response.ok)throw new Error('Could not load accounts. Sign in as administrator and refresh accounts.');
+    const accounts=(await response.json()).users;
+    element('usersList').textContent=accounts.length?accounts.map(u=>u.username+' — '+(u.role==='admin'?'Administrator':'Viewer')).join('\n'):'No accounts to display.';
+  }
   function forgetSession(message) {
     user=null;render(message);element('clear').click();
   }
@@ -15,7 +26,7 @@ const AccountsUI = (() => {
     if(!user&&element('managementPassword')){element('managementPassword').value='';element('managementStatus').textContent='';element('generationId').value='';element('managedDraft').textContent='';}
     if(!user&&element('draftList'))element('draftList').textContent='';
     if(!user&&element('draftArchivePassword'))element('draftArchivePassword').value='';
-    if(!user){element('usersList').textContent='';element('securityEvents').textContent='';element('newPassword').value='';element('currentPassword').value='';}
+    if(!user){element('usersList').textContent='';element('securityEvents').textContent='';element('usersMessage').textContent='';element('newPassword').value='';element('currentPassword').value='';}
     element('accountStatus').textContent = message || (user ? 'Signed in as '+user.username+' ('+user.role+').' : 'Sign in to view this server.');
     document.querySelector('.unlock').hidden = mode === 'accounts';
   }
@@ -37,11 +48,12 @@ const AccountsUI = (() => {
         if (response.ok) user = await response.json();
       }
       render();
+      if(user&&user.role==='admin')try{await loadAccounts();}catch(error){accountMessage(error.message);}
     } catch (_) {mode='unavailable';render('Authentication service unavailable.');}
   })();
   element('signIn').onclick = async () => {
     element('signIn').disabled = true;
-    try {user = await request('/api/login',{username:element('username').value,password:element('password').value});render();if(typeof refresh==='function')await refresh();}
+    try {user = await request('/api/login',{username:element('username').value,password:element('password').value});render();if(user.role==='admin')try{await loadAccounts();}catch(error){accountMessage(error.message);}if(typeof refresh==='function')await refresh();}
     catch (error) {user=null;render(error.message);}
     finally {element('password').value='';element('signIn').disabled=false;}
   };
@@ -51,23 +63,27 @@ const AccountsUI = (() => {
   };
   element('listUsers').onclick = async () => {
     try {
-      const accounts = await fetch('/api/accounts',{cache:'no-store',credentials:'same-origin'});
+      await loadAccounts();
       const security = await fetch('/api/security-events',{cache:'no-store',credentials:'same-origin'});
-      if(!accounts.ok||!security.ok)throw new Error('Administrator session required.');
-      element('usersList').textContent=(await accounts.json()).users.map(u=>u.username+' — '+u.role).join('\n');
+      if(!security.ok)throw new Error('Could not load security events. Administrator session required.');
       element('securityEvents').textContent=(await security.json()).events.map(e=>new Date(e.time*1000).toLocaleString()+' — '+e.event+(e.username?' — '+e.username:'')).join('\n');
     }catch(error){element('usersMessage').textContent=error.message;}
   };
   element('saveUser').onclick = async () => {
     element('saveUser').disabled=true;
+    element('saveUser').textContent='Saving…';
+    accountMessage('Checking account details…');
     try {
+      element('newUsername').value=element('newUsername').value.trim();
       if(!/^[a-z][a-z0-9_.-]{2,31}$/.test(element('newUsername').value))throw new Error('Use 3–32 lowercase letters, numbers, dots, underscores or hyphens, starting with a letter.');
       if(element('newPassword').value.length<15||element('newPassword').value.length>128)throw new Error('Use a new passphrase of 15–128 characters.');
+      if(!element('currentPassword').value)throw new Error('Enter your current administrator passphrase to authorize saving this account.');
       const result=await request('/api/accounts',{username:element('newUsername').value,role:element('newRole').value,password:element('newPassword').value,current_password:element('currentPassword').value,replace:element('replaceUser').checked});
-      element('usersMessage').textContent='Account saved. Previous sessions were revoked if this was a reset.';
+      accountMessage('Account “'+result.username+'” '+(element('replaceUser').checked?'reset. Previous sessions were revoked.':'created. It is listed above.'));
+      if(!result.reauthenticate)try{await loadAccounts();}catch(error){accountMessage('Account saved, but the list could not refresh. Use Refresh accounts and security events.');}
       if(result.reauthenticate){user=null;render('Your account changed. Sign in again.');element('clear').click();if(typeof refresh==='function')await refresh();}
     }catch(error){element('usersMessage').textContent=error.message;}
-    finally{element('newPassword').value='';element('currentPassword').value='';element('saveUser').disabled=false;}
+    finally{element('newPassword').value='';element('currentPassword').value='';element('saveUser').disabled=false;element('saveUser').textContent='Save account';}
   };
   async function activity() {
     if (!user || Date.now()-lastActivity<60000) return;
