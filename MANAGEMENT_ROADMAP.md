@@ -10,12 +10,12 @@ network. The web page is one component, not the whole product.
 | Secure accounts | Admin/viewer, hashed passwords/sessions, persistent attempt limits, CSRF, Host/Origin checks, security events. | Actual authenticated browser acceptance. |
 | Private HTTPS | Guided certificate checks, restricted proxy, backend ingress proof, explicit VPN/LAN client allowlist. | Certificate lifecycle, browser acceptance, additional client-network refusal proof. |
 | Guided installation | Preview first; persistent engine, separate mirror and unprivileged web; first administrator. | Combined actual host reboot, reviewed upgrade and supported-host matrix. |
-| Configuration | Local supported profile import, private validated drafts, prepared-version selection and readable review. | Private retention/archive and broader manager layout acceptance. |
+| Configuration | Local supported profile import, private validated drafts, prepared-version selection and readable review. | Reversible private retention implemented and under real traffic testing; ten manager layouts passed114 checks. Final browser acceptance remains. |
 | Safe Apply | Restricted root broker, durable journal, independent watcher, complete immutable generations; real confirmed/expired/crash/restart/storage-full acceptance. | Gates stay OFF in ordinary installs until final full-system acceptance. Layout changes remain refused. |
 | Operations | Bounded temporary priority/exclusion, automatic expiry, real encrypted application traffic verified. | Broader interface/accessibility/browser acceptance. |
-| Diagnostics/alerts | Readable tunnel status, switching observations and security events. | Sanitized support export and documented optional alerts. |
+| Diagnostics/alerts | Readable tunnel status, switching observations and security events. | Anonymous administrator support export implemented and tested; documented optional alerts remain. |
 | Backup/recovery | Encrypted confirmed-settings export and fresh-install restore, real persistent-storage acceptance. | Full upgrade/reboot/recovery procedure; certificate/account recovery scope documented. |
-| Product acceptance | Four-path encrypted traffic, rollback, storage and web API checks completed on isolated Linux fixtures. | Final-source tests, browser, layout/host/upgrade/reboot gates, documentation and review before stable publication. |
+| Product acceptance | Four-path encrypted traffic, rollback, storage and web API checks completed on isolated Linux fixtures. | Final-source tests, browser, host/upgrade/reboot gates, documentation and review before stable publication. |
 
 ## Release policy
 
