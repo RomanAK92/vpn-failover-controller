@@ -11,6 +11,7 @@
     el('generationId').value = '';
     el('managedDraft').textContent = '';
     el('preparedGeneration').textContent = '';preparedSignature=null;
+    el('archivedGeneration').textContent='';
     el('preferredPath').textContent='';el('maintenancePath').textContent='';pathSignature=null;
   }
   function buttons() {
@@ -26,6 +27,9 @@
     const operating = busy || !AccountsUI.testApplyEnabled() || !status?.live_apply_enabled
       || !status?.path_names?.length || pending?.phase === 'pending' || pending?.phase === 'rollback-requested';
     el('temporaryOperation').disabled=operating;el('automaticOperation').disabled=operating;
+    const retaining=busy||!status||status.storage_fault||pending?.phase==='pending'||pending?.phase==='rollback-requested';
+    el('archiveGeneration').disabled=retaining||!el('generationId').value||el('generationId').value===status?.selected_generation;
+    el('restoreGeneration').disabled=retaining||!el('archivedGeneration').value;
   }
   async function refreshStatus() {
     if (!AccountsUI.canControl()) {reset(); buttons(); return;}
@@ -33,13 +37,15 @@
       status = await AccountsUI.controlStatus();
       if(!AccountsUI.canControl()){reset();buttons();return;}
       const change = status.transaction?.change;
-      const prepared=status.prepared||[], versions=JSON.stringify(prepared);
+      const prepared=status.prepared||[], archives=status.archived||[], versions=JSON.stringify([prepared,archives,status.selected_generation]);
       if(versions!==preparedSignature){
         const previous=el('generationId').value;
         el('preparedGeneration').textContent='';
         const none=document.createElement('option');none.value='';none.textContent='Choose previously prepared settings';el('preparedGeneration').append(none);
         for(const item of prepared){const option=document.createElement('option');option.value=item.id;option.textContent=item.label+(item.id===status.selected_generation?' — currently selected':'');el('preparedGeneration').append(option);}
         el('preparedGeneration').value=prepared.some(item=>item.id===previous)?previous:'';
+        el('archivedGeneration').textContent='';
+        for(const item of archives){const option=document.createElement('option');option.value=item.id;option.textContent=item.label;el('archivedGeneration').append(option);}
         preparedSignature=versions;
       }
       const names=status.path_names||[], signature=JSON.stringify(names);
@@ -69,6 +75,7 @@
       const result=await AccountsUI.control(name,data);
       if(!AccountsUI.canControl()){reset();return;}
       if(name==='prepare') {el('generationId').value=result.id;previewed=null;el('managementMessage').textContent='Engine prepared this draft. Active tunnels have not changed. Review before Apply.';}
+      else if(name==='archive'||name==='restore'){el('generationId').value=name==='restore'?result.id:'';previewed=null;el('managementMessage').textContent=name==='archive'?'Unused prepared settings archived privately. Traffic was not changed.':'Settings restored privately. Review them before applying. Traffic was not changed.';}
       else if(name==='preview') {previewed=result.live_footprint_compatible?data.generation:null;el('managementMessage').textContent=[result.live_footprint_compatible?'These settings keep the same reserved network resources.':'These settings need a network layout change, which this Apply driver does not support.',...(result.changes||[]),...(result.reasons||[]),'Preferred order: '+(result.path_order||[]).join(' → '),'Credentials are checked privately. After Apply, the engine must prove all tunnels and the real application work before confirmation.'].join('\n');}
       else el('managementMessage').textContent=name==='apply'?'Change started. Check your real application, then confirm before the timer ends.':name==='confirm'?'Engine confirmed the change after fresh tunnel and application checks.':name==='operate'?'Temporary preference saved. Check Connection overview to see which road actually carries traffic. Automatic priority returns when the timer ends.':name==='automatic'?'Automatic priority requested. Healthy recovery thresholds still apply.':'Return requested. Wait for recovery health checks.';
     }catch(error){el('managementMessage').textContent=error.message;}
@@ -88,6 +95,9 @@
   el('automaticOperation').onclick=()=>action('automatic',{},true);
   el('generationId').oninput=()=>{previewed=null;buttons();};
   el('preparedGeneration').onchange=()=>{el('generationId').value=el('preparedGeneration').value;previewed=null;el('managementMessage').textContent='Review these settings before applying them.';buttons();};
+  el('archivedGeneration').onchange=buttons;
+  el('archiveGeneration').onclick=()=>action('archive',{generation:el('generationId').value},true);
+  el('restoreGeneration').onclick=()=>action('restore',{generation:el('archivedGeneration').value},true);
   document.addEventListener('pointerdown',()=>{if(!AccountsUI.canControl())reset();});
   AccountsUI.ready.then(()=>{refreshStatus();setInterval(refreshStatus,3000);});
 })();
