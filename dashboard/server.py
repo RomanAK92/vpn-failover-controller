@@ -211,7 +211,7 @@ def serve(args):
         raise ValueError('Plain HTTP account mode requires a loopback listener.')
     check_binding(args.bind, 'account-mode-requires-origin-check' if auth_dir else token)
     accounts = Accounts(auth_dir) if auth_dir else None
-    if accounts and not accounts.db.execute("SELECT 1 FROM users WHERE role='admin'").fetchone():
+    if accounts and not accounts.db.execute("SELECT 1 FROM users WHERE role='admin' AND enabled=1").fetchone():
         raise ValueError('Create an administrator before starting account mode.')
     draft_dir = getattr(args, 'draft_dir', None)
     if draft_dir and not accounts:
@@ -276,6 +276,8 @@ def serve(args):
                     self.json_response(200, user, {'Set-Cookie': cookie_header(sid, secure)})
                 elif self.path == '/api/accounts':
                     self.json_response(200, accounts.change_user(self.sid(), self.headers.get('X-CSRF-Token', ''), data.get('current_password'), data.get('username'), data.get('password'), data.get('role'), data.get('replace', False), address=address))
+                elif self.path in ('/api/accounts/disable','/api/accounts/enable','/api/accounts/delete'):
+                    self.json_response(200,accounts.account_action(self.sid(),self.headers.get('X-CSRF-Token',''),data.get('current_password'),data.get('username'),self.path.rsplit('/',1)[-1],data.get('confirmed',False),data.get('confirmation',''),address))
                 elif self.path == '/api/drafts' and drafts:
                     accounts.session(self.sid(), self.headers.get('X-CSRF-Token', ''), admin=True)
                     self.json_response(201, drafts.save(data.get('files'), data.get('label')))
