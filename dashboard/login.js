@@ -14,6 +14,7 @@ const AccountsUI = (() => {
     if(element('managementPanel'))element('managementPanel').hidden = !controlEnabled || !user || user.role !== 'admin';
     if(!user&&element('managementPassword')){element('managementPassword').value='';element('managementStatus').textContent='';element('generationId').value='';element('managedDraft').textContent='';}
     if(!user&&element('draftList'))element('draftList').textContent='';
+    if(!user&&element('draftArchivePassword'))element('draftArchivePassword').value='';
     if(!user){element('usersList').textContent='';element('securityEvents').textContent='';element('newPassword').value='';element('currentPassword').value='';}
     element('accountStatus').textContent = message || (user ? 'Signed in as '+user.username+' ('+user.role+').' : 'Sign in to view this server.');
     document.querySelector('.unlock').hidden = mode === 'accounts';
@@ -83,5 +84,6 @@ const AccountsUI = (() => {
     canManageDrafts:()=>draftsEnabled&&!!user&&user.role==='admin',
     saveDraft:async(files,label)=>{if(!draftsEnabled||!user||user.role!=='admin')throw new Error('Sign in as administrator on a draft-enabled installation.');return request('/api/drafts',{files,label});},
     listDrafts:async()=>{if(!draftsEnabled||!user||user.role!=='admin')throw new Error('Administrator access required.');const response=await fetch('/api/drafts',{credentials:'same-origin',cache:'no-store'});if(!response.ok)throw new Error('Draft list unavailable.');return response.json();},
+    archiveDraft:async(action,id,password)=>{if(!draftsEnabled||!user||user.role!=='admin'||!['archive','restore'].includes(action))throw new Error('Administrator access required.');return request('/api/drafts/'+action,{id,current_password:password});},
     expired:()=>{user=null;render('Session expired. Sign in again.');element('clear').click();}};
 })();
