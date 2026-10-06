@@ -15,7 +15,7 @@ network. The web page is one component, not the whole product.
 | Operations | Bounded temporary priority/exclusion, automatic expiry, real encrypted application traffic verified. | Broader interface/accessibility/browser acceptance. |
 | Diagnostics/alerts | Readable status/history, anonymous support export and optional restricted Uptime Kuma reporter implemented and tested with fake tokens. | Actual user browser review; real notification delivery requires operator configuration. |
 | Backup/recovery | Encrypted confirmed-settings export and fresh-directory restore, different-source reviewed-manager upgrade, actual host reboot and private storage exhaustion passed. | Arbitrary legacy migrations are not certified; accounts/certificates are outside settings backup. |
-| Product acceptance |178 Linux unit tests;13 HTTPS checks;34 storage/traffic and34 operator-mode checks;39 reviewed upgrade checks; actual host reboot passed. User confirmed accounts, engine status and compatible review. | Remaining human Apply/confirmation/rollback plus profile review and final review before stable publication. |
+| Product acceptance |178 Linux unit tests;13 HTTPS checks;34 storage/traffic and34 operator-mode checks;39 reviewed upgrade checks; actual host reboot passed. Human accounts, status, compatible review and Apply/confirmation completed. | Simplified-layout/profile/viewer/accessibility review and final review before stable publication. |
 
 ## Release policy
 
