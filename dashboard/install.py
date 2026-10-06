@@ -10,7 +10,8 @@ import subprocess
 import sys
 
 SOURCE = pathlib.Path(__file__).resolve().parent
-FILES = ('Dockerfile', 'server.py', 'history.py', 'accounts.py', 'drafts.py', 'login.js', 'drafts.js', 'mirror.py', 'index.html', 'app.js', 'profiles.js', 'style.css')
+FILES = ('Dockerfile', 'server.py', 'history.py', 'accounts.py', 'drafts.py', 'control.py', 'support.py',
+         'login.js', 'drafts.js', 'management.js', 'mirror.py', 'index.html', 'app.js', 'profiles.js', 'style.css')
 IDENTITY = 'vpn-dashboard-installer-v1'
 
 
