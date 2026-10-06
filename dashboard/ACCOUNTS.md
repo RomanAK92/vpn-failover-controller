@@ -48,7 +48,7 @@ unprivileged port (default example 8443). Do not expose this development service
 Prepare a private nginx.conf without changing networking:
 
 ```sh
-python3 tls_proxy.py --origin https://vpn.example.org:8443 --bind 10.250.1.2 > /your/private/nginx.conf
+python3 tls_proxy.py --origin https://vpn.example.org:8443 --bind 10.250.1.2 --allow-cidr 10.60.0.0/24 > /your/private/nginx.conf
 ```
 
 Set DASHBOARD_ORIGIN to the same exact HTTPS origin. Set HTTPS_CONFIG and
@@ -93,8 +93,13 @@ SameSite=Strict cookie. The SSH tunnel encrypts transport in that local mode.
   absolutely. Automatic monitoring polls do not extend idle expiry.
 - State-changing login/logout/activity requests require exact Origin and a custom
   request header; authenticated operations additionally require a CSRF token.
-- Viewer accounts cannot read administrator security events. Both roles currently
-  monitor only; there is no live apply endpoint.
+- Viewer accounts cannot read administrator security events or manage accounts.
+  The guided distribution additionally enables administrator-only private drafts;
+  saving explicitly transfers credentials to this server, unlike local preparation.
+  Active configuration is not mounted in the web service. The new manager exposes
+  narrow privileged operations through a read-only local socket; sensitive actions
+  require fresh administrator credentials. Ordinary root and web Apply gates stay
+  OFF. Test-only gates are for owned disposable acceptance, not production.
 - Bounded audit storage (1000 events; API returns last 200), request size, connection
   count and timeout. Audit events never store passwords, session tokens or profiles.
 
