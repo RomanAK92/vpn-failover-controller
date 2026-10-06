@@ -111,6 +111,9 @@ class BootstrapTests(unittest.TestCase):
             '-keyout',str(tls/'privkey.pem'),'-out',str(tls/'fullchain.pem')],check=True,capture_output=True)
         (tls/'privkey.pem').chmod(0o600)
         settings={'origin':'https://vpn.test.invalid:8443','bind':'127.0.0.1','directory':str(tls)}
+        tls.chmod(0o755)
+        with self.assertRaises(ValueError):bootstrap.validate_https(settings)
+        tls.chmod(0o700)
         preview_destination=self.root/'preview-only'
         preview_args=[__import__('sys').executable,str(ROOT/'management/bootstrap.py'),
             '--config-dir',str(self.config),'--destination',str(preview_destination),
