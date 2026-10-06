@@ -141,8 +141,71 @@ The original failure logs remain private. These failures are not silently remove
 The final combined installer has not yet completed actual host reboot, different-
 version upgrade, supported-host matrix or actual authenticated browser acceptance.
 The browser preview was policy-blocked; HTTP/Node tests are not a substitute.
-Private draft/generation archival, sanitized support export and optional alerts
-remain to be completed. A new persistent-manager ten-layout runner is in progress;
-its results are not claimed yet. Explicit TCP readiness has a mocked unit test
-only and cannot certify authenticated business transactions. Default live Apply
+Private draft/generation archival and sanitized support export have since passed
+the tests below. Optional outbound alerts remain unimplemented. The persistent
+manager ten-layout runner completed; its exact results are recorded below.
+Explicit TCP readiness cannot certify authenticated business transactions. Default live Apply
 remains disabled until all applicable gates and final review pass.
+
+### Completed persistent manager layout matrix
+
+Frozen18dd0fe passed114 checks across all ten layouts: WireGuard1–4, IPsec1–4,
+IPsec-first three and interleaved four. Each used the actual persistent guided
+manager, encrypted application traffic, inbound pinned replies, fail-closed and
+recovery, three container restarts, fresh readiness, memory limits and ordinary
+Apply disabled. Exit0; owned containers/networks/images/private credentials were
+cleaned and original lab services/default route preserved. This is container
+restart evidence, not an actual host reboot or a natural rekey observation.
+The initial layout harness used an incorrect socket path/framing; that failure
+was retained, corrected to the real bounded IPC protocol and fully rerun.
+
+### Subsequent retention and diagnostics development
+
+Frozeneafaaa6 passed156 Linux tests and11 HTTPS checks. Anonymous support export
+uses numbered paths and fixed health counters, omitting credentials, names,
+addresses, accounts, complete settings and raw logs. Permission tests require
+an administrator session and reject unauthenticated/viewer downloads.
+
+The first retention checkpoint43ef637 ran162 tests and failed one HTTP archive
+check: the request was refused before moving files because the new named audit
+event was absent from the strict event allowlist. Four specific archive/restore
+events were added; unknown events remain refused. Correcteda9aaa28 passed164
+Linux tests and12 guided certificate-verified HTTPS checks, including reversible
+draft archive/restore and anonymous support download. Its real encrypted traffic
+runner passed32 checks, exit0, including real traffic preserved during reversible
+inactive-generation archival. Its owned fixture was removed; original lab
+services and the host default route remained unchanged.
+
+Completed staging-link retirement checks protect pending/unacknowledged recovery,
+refuse replaced links and preserve credential generations and unrelated files.
+Version archival is bounded and reversible, not credential deletion. These
+newer changes are under draft review. Windows passed164 tests with69 Linux-only
+skips; all five Node suites passed. These skips are not Linux acceptance evidence.
+
+### Actual private-network clients
+
+Frozen12660b2 passed13 certificate-verified HTTPS checks, exit0, using separate
+unprivileged Docker clients. The listed private source was accepted and an
+unlisted source received403 despite forged forwarded headers. The fixture used
+one exact temporary host INPUT rule restricted to its owned private bridge,
+destination and selected TCP port; cleanup removed that rule and its resources.
+The earlier client runner failed at connection and did not prove the allowlist.
+The corrected runner records bounded connection errors. The original failure
+logs are retained. This also demonstrates that an operator must review the host
+firewall in addition to the application allowlist; preparation does not open it.
+
+Frozen12660b2 passed39 persistent encrypted checks, exit0. An older reviewed
+management source819bfb3 was replaced with the newer manager after encrypted
+backup and fresh-directory restore with a new administrator account. The source
+manager hashes differed; only one VPN owner ran at a time. Four real encrypted
+paths and Docker application traffic recovered. Subsequent Apply, confirmation,
+expiry, watcher failure, restart rollback and reversible archive checks passed.
+Real TCP readiness accepted the open private application port and refused the
+closed port. Cleanup removed owned resources and retained predecessor logs;
+original lab services and the host default route remained unchanged. This is a
+development-manager upgrade, not migration of an arbitrary existing installation.
+
+Actual host reboot acceptance is being prepared separately; no host reboot pass
+or final full-management stable release is claimed yet. The only actual host
+platform checked here is Ubuntu24.04.4 LTS, kernel6.8.0, Docker29.1.3 and Compose
+2.40.3. Other Linux distributions have not been certified by these results.
