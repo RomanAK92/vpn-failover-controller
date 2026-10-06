@@ -64,7 +64,11 @@ def main(network_clients=False):
             client_rule=['-s','172.28.248.0/24','-d',bind,'-p','tcp','--dport',str(port),
                          '-m','comment','--comment',project,'-j','ACCEPT']
             run('iptables','-w','5','-I','INPUT','1',*client_rule)
-        with socket.socket() as sock:sock.bind(('127.0.0.1',8787))  # Refuse an occupied backend.
+        with socket.socket() as sock:
+            # Match the server's reuse setting: recent owned TIME_WAIT sockets
+            # are not a running listener. An actual occupied backend still fails.
+            sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+            sock.bind(('127.0.0.1',8787))
         origin='https://'+bind+':'+str(port)
         certs=fixture_.root/'certs';certs.mkdir(mode=0o700)
         run('openssl','req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:P-256',
