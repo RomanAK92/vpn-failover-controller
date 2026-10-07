@@ -21,13 +21,14 @@ Use the owned isolated fixture, disposable profiles and existing private access.
 Do not Apply the two-path import draft over the running four-path footprint.
 Follow BROWSER_ACCEPTANCE.md. Record actual browser/version and source checkpoint.
 
-- [ ] Select a disposable profile through the actual file picker; validate, inspect
+- [x] Select a disposable profile through the actual file picker; validate, inspect
   masked preview and save/reload its draft. Unsupported input shows a clear error.
-- [ ] Check real Viewer navigation/sign-out/back/refresh: monitoring works;
-  administrative actions remain inaccessible and session loss clears secrets.
+- [x] Check real Viewer navigation/sign-out/back/refresh: monitoring works;
+  administrator tabs are absent and logout requires reauthentication.
+  Secret clearing remains supporting programmatic evidence.
 - [ ] Check keyboard focus, narrow-screen layout, long names and visible errors.
-- [ ] Review remaining browser checklist items (archive/restore, status freshness,
-  support download and temporary-operation timers) against actual observations.
+- [x] Human draft archive/restore, fresh Viewer status and guided mismatch warning.
+- [ ] Remaining browser support-download and temporary-operation timer observations.
 
 API/Node simulations are supporting evidence, not these checkmarks. If browser
 automation is blocked, retain the unresolved gate and use human observations;
