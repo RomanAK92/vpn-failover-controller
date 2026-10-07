@@ -170,11 +170,33 @@ until checks pass. See [transaction details](TRANSACTIONS.md).
 The page separates four tasks: **Overview** shows connection health, **Profiles**
 prepares and saves settings, **VPN changes** reviews compatible settings and
 controls temporary preferences, and **Accounts** manages users and security events.
-In VPN changes, choose prepared settings and review them first. Enter your current
-administrator passphrase beside Apply. After checking your application, enter it
-again beside **My application works — keep these settings** and confirm before
-the countdown expires. Each sensitive action clears the passphrase field.
-An empty or incorrect field produces an error; it does not confirm a change.
+Start in **Profiles**: enter the office network, reliable check computers and
+Docker application network; add WireGuard files or IPsec settings in preferred
+order. Click **Validate & preview**. A green check means local validation passed,
+not that a gateway or tunnel is reachable. A red X points to the error below.
+Editing settings clears the result. Unsupported scripts such as PostUp are
+refused, never executed.
+
+Give the configuration a name and click **Save reviewed settings as a private
+draft**. Saving uploads credentials to private server storage but changes no
+traffic. Click **Continue to VPN review** to select that saved draft automatically.
+For an older draft, click **Show saved drafts**, choose it, then Continue.
+
+If the draft has a different tunnel count, the page explains the mismatch and
+disables **Prepare for review**. For a new installation, use **Download private
+configuration** in Profiles and follow the installation instructions. Keep that
+download private: it contains secrets. Matching tunnel counts alone do not prove
+compatibility; the engine must review the complete network footprint.
+
+For a draft that can proceed, enter your administrator passphrase and click
+**Prepare for review**. This creates a version without changing tunnels. Select it
+under **Configuration already prepared for review**, then **Review what will
+change**. If that review allows Apply, enter your passphrase beside **Apply
+reviewed settings**. Check your application, re-enter the passphrase and click
+**Keep these settings** before the countdown ends. Sensitive actions clear the
+passphrase field. An empty or incorrect field cannot confirm a change. Viewers
+can prepare/download their own profiles locally but cannot access server drafts
+or operate the engine.
 
 Initial installation supports one to four paths. Live Apply cannot add, remove
 or rename tunnels, change office/application networks, MTU/MSS, interface or
