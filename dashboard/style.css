@@ -8,3 +8,15 @@
 
 /* One task per view, with secondary actions behind labelled disclosure panels. */
 .main-nav{position:sticky;top:0;z-index:10;background:#f3f6f3;padding:12px 0;flex-wrap:wrap;gap:8px;margin:20px 0}.main-nav button{margin:0}.change-step{border-top:1px solid #dce5de;margin-top:20px;padding-top:8px}.advanced{border:1px solid #dce5de;border-radius:10px;padding:14px 16px;margin:20px 0}.advanced summary{cursor:pointer;font-weight:600;color:#235740}.advanced[open]>summary{margin-bottom:18px}#confirmGeneration{background:#235740;color:white}#accountPanel{padding:16px 20px;margin-top:12px}#accountPanel h2{margin-top:0}#managementStatus{border-left:4px solid #537667}#events{max-height:360px;overflow-y:auto}nav button:focus-visible,summary:focus-visible{outline:2px solid #235740;outline-offset:3px}
+
+.validation-status{display:inline-block;vertical-align:middle;padding:9px 13px;border-radius:9px;font-weight:600;margin:4px 8px 4px 0}.validation-status.neutral{color:#617269;background:#f0f4f1}
+
+/* Align network and IPsec inputs below labels of different lengths. */
+.fields{align-items:end}.fields input,.fields select{min-height:44px}
+
+.workflow-help{padding:14px 16px;border-left:4px solid #537667;border-radius:8px;background:#f0f4f1}.workflow-help.bad{border-left-color:#9b433d;color:#9b433d;background:#f8e9e6}
+
+/* Visible keyboard focus for every control, and a single column on small screens. */
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #235740;outline-offset:3px}
+.fields>*{min-width:0}input,select,textarea{min-width:0}button,.workflow-help{overflow-wrap:anywhere}
+@media(max-width:650px){.fields,.roads{grid-template-columns:minmax(0,1fr)}button,.validation-status{max-width:100%}.panel{padding:18px}.advanced{padding:12px}.main-nav button{flex:0 1 auto}}
