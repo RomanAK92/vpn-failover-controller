@@ -72,8 +72,11 @@ it does not prove that a login, database query or business transaction works.
 | tls, proxy | Optional private certificate and HTTPS configuration. |
 
 Only the engine can manage VPN networking. The web container has no Docker
-socket, active tunnel keys or network administration capabilities. The mirror
-has no networking. Containers use read-only filesystems and bounded memory.
+socket, engine settings-directory mount or network administration capabilities.
+It does store imported private drafts containing credentials; treat its draft
+storage as sensitive even when the same credentials are later applied by the
+engine. The mirror has no networking. Containers use read-only filesystems and
+bounded memory.
 
 ## Review and start only on the test server
 
