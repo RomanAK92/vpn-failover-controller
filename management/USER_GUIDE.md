@@ -1,7 +1,8 @@
 # Install and use the VPN system, step by step
 
-This guide covers the **management development candidate**, not the older
-published v0.4.1 dashboard. PR #5 is still awaiting its remaining browser checks.
+This guide covers **v0.5.0 private VPN management**, including the VPN engine,
+authenticated dashboard and guarded controls. The older v0.4.1 dashboard does
+not include these management functions.
 Use a separate test Linux server first. This guide does not approve deployment
 over an existing production VPN.
 
@@ -47,15 +48,13 @@ firewall to make a test pass.
 
 ## 3. Get the reviewed program files
 
-The following candidate checkpoint passed its source checks. It is not a stable
-release tag. Run on the separate test server:
+Use the reviewed release tag below. Run on the separate test server:
 
 ```sh
-sudo git clone --branch secure-management --single-branch \
+sudo git clone --branch v0.5.0 --single-branch \
   https://github.com/RomanAK92/vpn-failover-controller.git \
   /opt/vpn-failover-controller
 cd /opt/vpn-failover-controller
-sudo git checkout --detach ca507a2b259c777fd7e9ecc9394485bf3a6595d4
 ```
 
 The checkout holds programs and examples. **Never put real keys into Git.**
@@ -66,7 +65,7 @@ hold the prepared installation. These are different folders.
 
 You do not need a running dashboard on this new server yet. Choose one route:
 
-### Route A: you already have access to this candidate's dashboard elsewhere
+### Route A: you already have access to a v0.5.0 dashboard elsewhere
 
 1. Open **Profiles**. Enter the three network fields from your information sheet.
 2. Add each WireGuard file, or enter each IPsec connection's structured settings.
@@ -320,7 +319,7 @@ plan a separate migration instead of defeating the review checks.
 
 ## 10. Upgrades, backups and stopping
 
-This guide installs a new candidate system. It does not migrate an older custom
+This guide installs a new v0.5.0 system. It does not migrate an older custom
 wireguard-router, your production installation or every previous release.
 Bootstrap refuses to overwrite an installation. Do not use the root legacy
 Compose workflow and the managed workflow as two simultaneous owners.
