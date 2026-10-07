@@ -12,9 +12,9 @@
 
 Published tags remain unchanged. GitHub releases do not upgrade a running server.
 
-## Current candidate: complete private management
+## v0.5.0: complete private management
 
-Draft PR5 adds administrator/Viewer accounts, private HTTPS, persistent managed
+PR5 adds administrator/Viewer accounts, private HTTPS, persistent managed
 installation, private drafts, compatible reviewed Apply, independent rollback,
 temporary selection, anonymous support export and encrypted settings recovery.
 Actual reboot, reviewed-manager upgrade, storage recovery and encrypted operator
@@ -24,16 +24,14 @@ See [current evidence](management/VALIDATION.md),
 [full-system roadmap](MANAGEMENT_ROADMAP.md) and
 [release checklist](management/RELEASE_CHECKLIST.md).
 
-## Finish this release first
+## Release review
 
-1. Consolidate installation, limits, evidence and PR description. Preserve failed
-   logs; distinguish actual human observations from API/frontend simulations.
-2. Complete the remaining browser checks with disposable profiles/accounts:
-   file selection, Viewer access, keyboard/narrow-screen layout and clear errors.
-3. Review the exact release source, supported upgrade/recovery instructions,
-   source/image checks and fresh CI. Merge/publish only after unresolved gates pass.
-4. Clean only verified disposable acceptance resources after review ends, retaining
-   operational evidence. Production deployment is a separate planned change.
+The required human walkthrough is complete, including file selection, rejected
+scripts, masked preview, drafts, Viewer boundaries, keyboard/narrow layout,
+support download and temporary countdown. API/Node checks remain supporting
+checks rather than browser observations. Final exact-source/CI review precedes
+merge and publication; scoped cleanup follows. Release metadata records those
+actions. Production deployment remains a separate operator change.
 
 ## After release
 
@@ -45,6 +43,6 @@ See [current evidence](management/VALIDATION.md),
 
 Initial installation already supports1–4 tunnels. Structural live migration,
 arbitrary WireGuard scripts, IPv6/full-tunnel routing and automatic gateway
-configuration are outside this candidate. Do not expand scope before release.
+configuration are outside v0.5.0. Do not expand scope before release.
 
 Prepared by **r.abdulkhalek**.
