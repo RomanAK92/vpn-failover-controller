@@ -21,7 +21,7 @@ version. Keep private settings outside Git and shared folders.
 
 ## Example: two WireGuard connections
 
-1. Open **Prepare profiles**. Enter your office subnet and reliable devices that
+1. Open the **Profiles** tab. Enter your office subnet and reliable devices that
    answer health checks. Enter the application network used by Docker.
 2. Import your first WireGuard profile and give it a readable name, such as
    Main office. Import the second and call it Backup office.
@@ -154,14 +154,32 @@ selected, running or recovery-referenced settings and blocks retention during a
 pending change. Only acknowledged completed staging links are retired; settings
 and operational logs are preserved. Archive-full cases need private offline review.
 
-Default installs deliberately disable Apply. In owned disposable acceptance,
-both engine and web explicitly enable the test gate. An administrator supplies
+Default installs deliberately disable Apply. The explicit operator opt-in below
+enables both engine and web controls; disposable test flags are not installation
+instructions. An administrator supplies
 their current passphrase for each sensitive action. The engine durably records
 rollback before changing anything. Confirmation is normally due within three
 minutes, and requires fresh tunnel plus application checks. Expiry, watcher
 failure or an unconfirmed restart restores the previous complete settings.
 Unsupported resource-layout changes are refused. Recovery is not marked complete
 until checks pass. See [transaction details](TRANSACTIONS.md).
+
+The page separates four tasks: **Overview** shows connection health, **Profiles**
+prepares and saves settings, **VPN changes** reviews compatible settings and
+controls temporary preferences, and **Accounts** manages users and security events.
+In VPN changes, choose prepared settings and review them first. Enter your current
+administrator passphrase beside Apply. After checking your application, enter it
+again beside **My application works — keep these settings** and confirm before
+the countdown expires. Each sensitive action clears the passphrase field.
+An empty or incorrect field produces an error; it does not confirm a change.
+
+Initial installation supports one to four paths. Live Apply cannot add, remove
+or rename tunnels, change office/application networks, MTU/MSS, interface or
+routing identifiers, or change IPsec endpoint ownership. A saved two-path draft
+cannot replace a running four-path installation through Apply. Such a change
+needs a separately reviewed migration; no automatic migration tool is provided.
+All required paths and the application must be healthy before a compatible change
+begins.
 
 Temporary preference/maintenance preserves normal failure and recovery thresholds.
 It expires automatically; excluding a tunnel does not stop its health checks.
@@ -221,6 +239,34 @@ footprint checks, fresh all-path/application readiness, independent rollback and
 confirmation deadlines remain mandatory. Unsupported layout changes are refused.
 Test and operator flags cannot be combined. Existing installations are not edited
 or automatically upgraded by preparation.
+
+For a NEW isolated installation, preview with the operator switch, then repeat
+with --prepare after reviewing the output:
+
+~~~sh
+sudo python3 management/bootstrap.py --config-dir /root/vpn-settings \
+  --managed --enable-managed-changes --application-address 192.168.50.10 \
+  --application-port 80 --application-path /health
+~~~
+
+Use your private application endpoint instead of the example. This command starts
+no services. Keep independent SSH access and follow the start procedure above
+only after preflight passes. Without --enable-managed-changes, monitoring and
+preparation remain available but the page cannot Apply settings.
+
+Actual host evidence covers Ubuntu 24.04.4, kernel 6.8, Docker 29.1.3 and Compose
+2.40.3. Python checks in CI do not certify other distributions, rootless Docker,
+Kubernetes, Windows or Docker Desktop. This service manages one private IPv4
+prefix and one Docker application network. Gateway peers, LAN routes, host
+firewall access and certificate trust must already be prepared by an administrator.
+
+A reviewed development-manager upgrade passed on the isolated host. This is not
+a universal migration from older custom or production controllers. Do not run
+bootstrap over an existing installation. Keep settings, account storage and
+certificates as separate private backups, preserve the working source version,
+and plan tested rollback before replacing code. Until release instructions
+explicitly support your upgrade path, evaluate a separate fresh installation;
+never run two network owners together. Settings backup is not whole-server backup.
 
 To repeat operator acceptance in a separate fresh owned namespace, use:
 
