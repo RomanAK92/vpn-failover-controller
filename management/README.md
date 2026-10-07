@@ -1,15 +1,15 @@
-# Private VPN management system (development)
+# Private VPN management system — v0.5.0
 
 This is a Linux service that keeps a server and its Docker applications connected
 to an office through one to four WireGuard or IPsec tunnels. It is not an internet
 VPN subscription. A gateway administrator must create matching peers and routes.
 The server's public default route stays unchanged.
 
-The management branch adds accounts, profile preparation, private drafts,
+This release adds accounts, profile preparation, private drafts,
 reviewed changes, independent rollback, temporary priorities and offline recovery.
-The complete product is still under acceptance testing. Live web changes are
-OFF in ordinary installations. Do not replace a working production service yet.
-See [actual evidence and remaining gates](VALIDATION.md).
+Live web changes are OFF in ordinary installations. Test your own gateways,
+application and recovery path before replacing a working production service.
+See [actual evidence and supported limits](VALIDATION.md).
 
 **Start here:** [plain-language deployment and every dashboard function](USER_GUIDE.md).
 It includes the first installation when no dashboard exists yet, two-profile
@@ -98,8 +98,8 @@ sudo docker compose --project-name vpn-system ps
 Resolve preflight errors before startup. Never run two controllers owning the
 same interfaces, routes or firewall rules. A green container does not replace
 checking your real application. Actual isolated host reboot and a reviewed
-development-manager upgrade passed. Human browser acceptance remains a release
-gate; the tested host is Ubuntu24.04.4.
+development-manager upgrade passed. The user completed the browser walkthrough; the tested host is Ubuntu24.04.4.
+This is not certification of every browser or Linux distribution.
 
 ## Open the page privately
 
@@ -245,25 +245,25 @@ application data, old program binaries and logs are excluded. Restore with
 reviewed compatible code, review preflight, and never start two owners together.
 
 Stopping a container is not network cleanup. Do not delete private directories
-or use unreviewed Compose edits as an upgrade. Follow the release gates before
-promoting this development branch.
+or use unreviewed Compose edits as an upgrade. Use the reviewed release and documented upgrade path.
 
-The final human browser checks are listed in
-[browser acceptance](BROWSER_ACCEPTANCE.md). They are a separate release gate;
+The human browser walkthrough is recorded in [validation](VALIDATION.md).
+Use [browser acceptance](BROWSER_ACCEPTANCE.md) when reviewing your own installation;
 automated HTTP tests do not certify that a person can complete the interface.
 
 
 
-## Explicit operator-control opt-in (development acceptance)
+## Explicit operator-control opt-in (default OFF)
 
 A normal managed deployment needs a supported control switch instead of reusing
-the isolated test flag. This candidate adds --enable-managed-changes to the
+the isolated test flag. This release provides --enable-managed-changes to the
 bootstrap command, only with --managed and valid application readiness. Preview
 reports the choice. Preparation writes matching engine and web flags, records
 the choice privately and still starts no services or networking. Omitting it
 keeps both gates off. The web cannot turn on its own gate or the engine gate.
 
-This mode passed isolated operator acceptance; it is not a stable production release.
+This mode passed isolated operator acceptance. Production deployment still needs
+a site-specific plan and independent recovery access.
 Passwords, administrator permissions, CSRF/Origin checks, private IPC, same-network
 footprint checks, fresh all-path/application readiness, independent rollback and
 confirmation deadlines remain mandatory. Unsupported layout changes are refused.
