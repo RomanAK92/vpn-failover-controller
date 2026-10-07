@@ -2,11 +2,12 @@
 // Credential transfer occurs only after this explicit administrator action.
 document.getElementById('saveDraft').onclick = async () => {
   const button = document.getElementById('saveDraft');
-  button.disabled = true;
+  button.disabled = true;document.getElementById('continueDraft').hidden=true;
   try {
     if(!prepared)throw new Error('Prepare profiles and click Review before saving a draft.');
     const result = await AccountsUI.saveDraft(prepared.files,document.getElementById('draftLabel').value.trim());
-    document.getElementById('draftMessage').textContent='Draft saved and checked by the VPN engine. Active tunnels were not changed.';
+    document.getElementById('draftMessage').textContent='Saved successfully. Active tunnels were not changed. Next: Continue to VPN review to check this saved configuration.';
+    const next=document.getElementById('continueDraft');next.dataset.draftId=result.id;next.textContent='Continue to VPN review — '+(result.label||document.getElementById('draftLabel').value.trim());next.hidden=false;
     document.getElementById('draftList').textContent=(result.label||'Saved draft')+' — '+(result.paths?.length||0)+' roads. Private saved copy; active settings were not changed.';
   }catch(error){document.getElementById('draftMessage').textContent=error.message;}
   finally{button.disabled=false;}
@@ -32,4 +33,10 @@ for(const action of ['archive','restore'])document.getElementById(action+'Draft'
     document.getElementById('draftMessage').textContent=action==='archive'?'Draft archived privately. It can be restored; traffic was not changed.':'Draft restored for preparation and review. Traffic was not changed.';
   }catch(error){document.getElementById('draftMessage').textContent=error.message;}
   finally{password.value='';}
+};
+
+document.getElementById('draftArchiveChoice').onchange=()=>{
+  const [state,id]=document.getElementById('draftArchiveChoice').value.split(':');
+  const next=document.getElementById('continueDraft');next.hidden=state!=='saved'||!id;
+  next.dataset.draftId=state==='saved'?id:'';next.textContent='Continue to VPN review for this saved draft';
 };
