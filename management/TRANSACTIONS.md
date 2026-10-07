@@ -5,8 +5,10 @@ root broker. Real four-path application tests cover confirmed changes, expired
 bad credentials, watcher failure and unconfirmed container restart. A separate
 bounded private-filesystem test also proved traffic recovery under storage-full
 conditions. Ordinary installations keep root and web Apply gates OFF; test flags
-are only for owned disposable acceptance. Actual host reboot, upgrade, browser
-and broader product gates remain. See VALIDATION.md for checkpoints and failures.
+are only for owned disposable acceptance. Explicit paired --enable-managed-changes
+is the operator opt-in for this candidate. Actual isolated host reboot, reviewed
+upgrade and storage recovery passed; final browser and release checks remain.
+See VALIDATION.md for checkpoints and preserved failures.
 
 ## Development components in plain language
 
@@ -28,8 +30,9 @@ and broader product gates remain. See VALIDATION.md for checkpoints and failures
 - `rollback_watch.py`: independently checks the confirmation deadline and boot.
   It requests recovery; it does not claim that the application has recovered.
 - `manager.py`: supervises the separate watcher and engine, and exposes the
-  private development socket. Its `--enable-test-apply` flag is only for disposable
-  acceptance topology. No released web service or guided Compose enables it.
+  private control socket. Its `--enable-test-apply` flag is only for disposable
+  acceptance topology. The separate `--enable-managed-changes` operator flag is
+  written to both engine and web only when explicitly chosen during preparation.
 - `lifecycle.py`: the earlier isolated process-driver acceptance entrypoint.
   It contains no apply listener and is not the final management-service installer.
 
@@ -72,7 +75,7 @@ that reconciliation passes failure injection, structural layout changes must be
 rejected by live apply. Initial guided installation already supports one to four
 tunnels in any permitted WireGuard/IPsec combination.
 
-The first driver acceptance will cover a fixed network footprint: changing
+The completed driver/operator acceptance covers a fixed network footprint: changing
 credentials, WireGuard gateway settings, probe timings and preference order without changing
 the managed subnet, application network, interfaces, addresses, routing IDs or
 firewall footprint. IPsec endpoint changes remain rejected until previous/new SA
@@ -83,8 +86,9 @@ On an exact SQLite FULL error, the isolated manager's recovery path blocks new
 changes, stops the candidate and selects the preallocated previous generation.
 It reports storage failure separately from traffic readiness and cannot mark a
 database recovery acknowledgement that was not written. Storage must be repaired
-and recovery reconciled before management changes resume. The real encrypted
-failure-injection runner is being verified; do not infer its result from unit tests.
+and recovery reconciled before management changes resume. Real encrypted failure
+injection passed on a disposable private filesystem; the host disk was not filled.
+See the current evidence summary in VALIDATION.md.
 
 ## Tests required before an Apply button
 
@@ -96,6 +100,9 @@ failure-injection runner is being verified; do not infer its result from unit te
 - Rejected foreign objects, unchanged public default/unrelated firewall rules.
 - Previous-generation recovery with fresh health; no false green on stale state.
 - One-to-four layouts and supported-host installation/upgrade/recovery.
+
+The following are historical foundation checkpoints, not current pending gates.
+Later transaction/reboot/upgrade results are recorded in VALIDATION.md.
 
 Completed guided + encrypted package acceptance passed22 checks. The process-driver
 variant and supervised-manager startup variant each passed23, including all four
