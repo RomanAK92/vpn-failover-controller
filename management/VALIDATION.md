@@ -2,7 +2,7 @@
 
 ## Current evidence summary — 7 October 2026
 
-PR5 remains a development draft. v0.4.1 is the published foundation. The current
+PR5 remains a development draft. v0.4.1 is the published foundation. The
 previous public source matched GitHub at 616c9980; both corresponding workflow
 runs passed. The newer guided-profile/validation/layout follow-up requires fresh
 published-tree and CI verification. No production host or live router
