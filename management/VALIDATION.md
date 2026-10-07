@@ -1,4 +1,50 @@
-# Management development validation, 5-6 October 2026
+# Management validation and current release position
+
+## Current evidence summary — 7 October 2026
+
+PR5 remains a development draft. v0.4.1 is the published foundation. The current
+source tree matched the GitHub branch at 92e8e739 on review; both corresponding
+GitHub workflow runs completed successfully. Publication of these documentation
+changes requires fresh exact-head verification. No production host or live router
+was accessed for this review.
+
+| Area | Recorded result | Limit |
+| --- | --- | --- |
+| Automated source checks |178 Linux unit tests; five Node suites; final published-head CI passed. | Unit tests are not browser/deployment acceptance. |
+| Persistent encrypted layouts | Ten layouts passed114 checks. | One private IPv4 prefix and supported profile subset. |
+| Explicit operator controls |34 encrypted checks passed with normal paired operator flags and no test flags. | Same network footprint; no structural live migration. |
+| Private HTTPS |13 certificate-verified checks passed, including allowed/refused separate clients. | Certificate issuance, browser trust and renewal are operator tasks. |
+| Storage and recovery |34 private-storage/traffic checks; actual host reboot;39 reviewed-manager upgrade checks passed. | No universal legacy migration or whole-server backup claim. |
+| Human interface | Accounts/layout, compatible review, pending countdown, Apply/confirmation and simplified tabs accepted. | Full profile-picker, Viewer, keyboard/narrow-screen and error-path review is not complete. |
+| Latest profile/Viewer/support follow-up | Eight programmatic checks passed; details below. | Not actual browser clicks or accessibility acceptance. |
+
+Earlier entries below preserve their original checkpoint context and failures.
+An old statement that work was pending describes that point in development, not
+the current release position. Use this summary and RELEASE_CHECKLIST.md for
+current gates. No new four-hour management soak, natural rekey or production
+migration is claimed. Earlier observations belong to their recorded releases.
+
+### Two-profile, Viewer and support follow-up
+
+The actual profile parser imported two disposable WireGuard profiles, produced
+a private-key-masked preview, and the server validator saved a two-path private
+draft. Its administrator summary appeared in the saved list. No Prepare or Apply
+was requested: the selected/running generation and transaction identity stayed
+unchanged, and the retained four-path engine stayed ready.
+
+A temporary Viewer could read monitoring. Account, draft, control, support and
+security-event endpoints denied it; a control POST with that Viewer's valid
+session/CSRF was also refused. Real responses fed a strict-HTML-ID frontend
+simulation and admin views stayed hidden. The temporary owned Viewer was removed
+through the authenticated account API afterward; its security history remained.
+
+The administrator support download contained no IPv4 addresses, imported public
+or private keys, administrator password, cookie or CSRF values. The private result
+and report remain outside Git. All eight checks passed. These checks used APIs,
+the actual parser and a Node frontend simulation, not a browser file picker,
+clicks, keyboard or screen-reader test. No VPN/container restart was performed.
+
+## Historical checkpoint record — 5–6 October 2026
 
 These are isolated development results, not a stable full-system certification.
 No production server or live router was accessed. Published tags were not changed.
