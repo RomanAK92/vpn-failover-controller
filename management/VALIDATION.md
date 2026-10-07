@@ -3,9 +3,9 @@
 ## Current evidence summary — 7 October 2026
 
 PR5 remains a development draft. v0.4.1 is the published foundation. The current
-source tree matched the GitHub branch at 92e8e739 on review; both corresponding
-GitHub workflow runs completed successfully. Publication of these documentation
-changes requires fresh exact-head verification. No production host or live router
+previous public source matched GitHub at 616c9980; both corresponding workflow
+runs passed. The newer guided-profile/validation/layout follow-up requires fresh
+published-tree and CI verification. No production host or live router
 was accessed for this review.
 
 | Area | Recorded result | Limit |
@@ -15,7 +15,7 @@ was accessed for this review.
 | Explicit operator controls |34 encrypted checks passed with normal paired operator flags and no test flags. | Same network footprint; no structural live migration. |
 | Private HTTPS |13 certificate-verified checks passed, including allowed/refused separate clients. | Certificate issuance, browser trust and renewal are operator tasks. |
 | Storage and recovery |34 private-storage/traffic checks; actual host reboot;39 reviewed-manager upgrade checks passed. | No universal legacy migration or whole-server backup claim. |
-| Human interface | Accounts/layout, compatible review, pending countdown, Apply/confirmation and simplified tabs accepted. | Full profile-picker, Viewer, keyboard/narrow-screen and error-path review is not complete. |
+| Human interface | Accounts/layout, compatible review, countdown, Apply/confirmation, profiles and Viewer accepted; follow-up below. | Keyboard/narrow-screen, support-download and temporary-timer browser review remains incomplete. |
 | Latest profile/Viewer/support follow-up | Eight programmatic checks passed; details below. | Not actual browser clicks or accessibility acceptance. |
 
 Earlier entries below preserve their original checkpoint context and failures.
@@ -43,6 +43,30 @@ or private keys, administrator password, cookie or CSRF values. The private resu
 and report remain outside Git. All eight checks passed. These checks used APIs,
 the actual parser and a Node frontend simulation, not a browser file picker,
 clicks, keyboard or screen-reader test. No VPN/container restart was performed.
+
+### Human guided-profile follow-up — 7 October 2026
+
+The user selected a disposable profile through the actual file picker, validated
+it, inspected a masked preview and saved Office connection. A deliberately
+unsupported PostUp profile produced an explicit error, red X and disabled download.
+An earlier attempt stopped at an invalid/empty office prefix and is not counted
+as the script-rejection check.
+
+The user confirmed draft archive/restore, fresh four-path Viewer Overview,
+absent administrator tabs, and sign-out followed by Back/refresh requiring sign-in.
+Continue to VPN review selected the saved one-tunnel draft, showed the mismatch
+with the four-path installation and disabled preparation. No one-tunnel Prepare
+or Apply was requested.
+
+Four relevant Node UI suites passed for the guided handoff, correct draft ID,
+no control mutation during Continue, refusal to prepare a count mismatch, and
+validation result resets. Static checks verified unique HTML IDs, no positive
+tabindex, focus rules and a narrow-screen single-column rule. These checks do not
+prove rendered keyboard/responsive behavior or a complete accessibility audit.
+Only the exact owned test web container was replaced for frontend updates;
+account/session rows, VPN engine and host default route were preserved, and health
+checks passed. Browser/version was not independently recorded. This follow-up
+claims no new long soak, rekey, reboot or production validation.
 
 ## Historical checkpoint record — 5–6 October 2026
 
