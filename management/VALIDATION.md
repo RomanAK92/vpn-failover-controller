@@ -2,11 +2,10 @@
 
 ## Current evidence summary — 7 October 2026
 
-PR5 remains a development draft. v0.4.1 is the published foundation. The
-previous public source matched GitHub at 616c9980; both corresponding workflow
-runs passed. The newer guided-profile/validation/layout follow-up requires fresh
-published-tree and CI verification. No production host or live router
-was accessed for this review.
+The v0.5.0 release review uses PR5. Published source 0ba2eac2 matched the local
+reviewed tree, and both corresponding workflows passed. Final release documentation
+is checked again against its exact published head before merge. No production
+host or live router was accessed.
 
 | Area | Recorded result | Limit |
 | --- | --- | --- |
@@ -15,7 +14,7 @@ was accessed for this review.
 | Explicit operator controls |34 encrypted checks passed with normal paired operator flags and no test flags. | Same network footprint; no structural live migration. |
 | Private HTTPS |13 certificate-verified checks passed, including allowed/refused separate clients. | Certificate issuance, browser trust and renewal are operator tasks. |
 | Storage and recovery |34 private-storage/traffic checks; actual host reboot;39 reviewed-manager upgrade checks passed. | No universal legacy migration or whole-server backup claim. |
-| Human interface | Accounts/layout, compatible review, countdown, Apply/confirmation, profiles and Viewer accepted; follow-up below. | Keyboard/narrow-screen, support-download and temporary-timer browser review remains incomplete. |
+| Human interface | Accounts/layout, compatible review, countdown, Apply/confirmation, profiles and Viewer accepted; follow-up below. | Remaining narrow-window/Tab, support download and temporary countdown checks were confirmed by the user on7 October; browser/version was not independently recorded. |
 | Latest profile/Viewer/support follow-up | Eight programmatic checks passed; details below. | Not actual browser clicks or accessibility acceptance. |
 
 Earlier entries below preserve their original checkpoint context and failures.
@@ -67,6 +66,23 @@ Only the exact owned test web container was replaced for frontend updates;
 account/session rows, VPN engine and host default route were preserved, and health
 checks passed. Browser/version was not independently recorded. This follow-up
 claims no new long soak, rekey, reboot or production validation.
+
+### Final browser walkthrough and supporting API checks — 7 October 2026
+
+After receiving the three-part instructions, the user reported that everything
+looked good: narrow-window/Tab behavior, actual anonymous support-file download,
+and visible temporary-operation countdown returning to automatic mode. This closes
+the required human walkthrough on the retained isolated fixture. These are
+user-reported observations, not an independent accessibility audit or certification
+of a particular browser/version.
+
+A separate API run verified anonymous report content, a naturally expiring
+180-second preference for the already active path, explicit return to automatic,
+and unchanged active path, selected/running generations and transaction identity.
+All four paths stayed healthy. The initial API run lost its SSH preview forward
+when its four-hour lifetime expired; that failure is retained and is not counted
+as a pass or VPN failure. The rerun passed. No Apply or engine restart was needed.
+Final owned-container identities, engine health and original default route passed.
 
 ## Historical checkpoint record — 5–6 October 2026
 
