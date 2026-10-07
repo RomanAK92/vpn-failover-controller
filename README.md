@@ -22,10 +22,14 @@ adds individual administrator/viewer accounts, restricted private HTTPS,
 [guided persistent installation](management/README.md), private validated drafts,
 transactional changes with independent rollback, temporary selection and encrypted
 offline recovery. Saving drafts does not apply them. Sensitive changes remain
-OFF in ordinary installations; only isolated acceptance enables test gates. The
+OFF by default. An explicit paired operator opt-in enables reviewed changes;
+test flags are reserved for disposable acceptance. The
 [full-system roadmap](MANAGEMENT_ROADMAP.md) and
-[management validation](management/VALIDATION.md) describe completed traffic/recovery checks and the remaining browser,
-host reboot, upgrade, retention and release gates. Existing published tags are unchanged.
+[management validation](management/VALIDATION.md) distinguish completed traffic,
+reboot, upgrade and recovery checks from remaining browser and release checks.
+Start with the [management installation guide](management/README.md); use the
+[release checklist](management/RELEASE_CHECKLIST.md) to assess this candidate.
+Existing published tags are unchanged.
 
 **v0.3.0:** adds one to four tunnels in any WireGuard/IPsec combination
 and fixes restart readiness so saved status alone cannot report a stopped
