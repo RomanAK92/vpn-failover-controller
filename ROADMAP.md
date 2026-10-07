@@ -1,57 +1,50 @@
 # Release and usability roadmap
 
-## v0.3.0 release gate
+## Released foundation
 
-RC2 fixes restart readiness and adds a plain-language installation guide.
-Before stable release: verify encrypted one/three-path and mixed-priority
-layouts, clean prerequisite checking, replacement of v0.2.0 while preserving
-configuration and networking, and a continuous four-hour application test.
-Review explicit successful natural IPsec rekey evidence for both connections.
-Four hours is the chosen observation window, not a twelve-hour certification.
-Only after all checks and final CI/review pass should PR2 merge and v0.3.0
-be published. Production upgrades remain separate from GitHub publication.
+- v0.3.0: one to four WireGuard/IPsec tunnels in permitted combinations. Ten
+  layouts, upgrade, four-hour application observation and natural CHILD rekeys
+  on both IPsec connections passed. No twelve-hour claim for RC2.
+- v0.4.0: optional read-only monitoring, guided local profile preparation and
+  private configuration export.
+- v0.4.1: preview-first dashboard installation, automatic mirror/dashboard
+  startup and bounded persistent switching history; isolated boot checks passed.
 
-## Released in v0.4.0: a read-only web dashboard
+Published tags remain unchanged. GitHub releases do not upgrade a running server.
 
-Show the active road, healthy standby roads, unreachable roads and the reason
-for the latest switch. Explain probe results and recovery waiting time in plain
-language. Include per-path events and switching history. Stale status must show
-unavailable rather than a misleading green badge.
+## Current candidate: complete private management
 
-Run the dashboard as an optional service with read-only runtime access. It must
-not require the Docker socket, network-administration privileges or permission
-to change VPN configuration. Default to loopback, with explicit private/VPN
-binding and authentication for remote access. Do not expose it to the public WAN.
+Draft PR5 adds administrator/Viewer accounts, private HTTPS, persistent managed
+installation, private drafts, compatible reviewed Apply, independent rollback,
+temporary selection, anonymous support export and encrypted settings recovery.
+Actual reboot, reviewed-manager upgrade, storage recovery and encrypted operator
+controls passed. Human accounts, Apply/confirmation and simplified task views
+have been accepted. Latest two-profile/Viewer/support programmatic checks passed.
+See [current evidence](management/VALIDATION.md),
+[full-system roadmap](MANAGEMENT_ROADMAP.md) and
+[release checklist](management/RELEASE_CHECKLIST.md).
 
-## Released in v0.4.0: guided configuration and profile import
+## Finish this release first
 
-Let users choose one to four roads and put them in preference order. Import
-WireGuard profiles locally or enter IPsec IKEv2/shared-secret settings through
-a guided form. Explain each missing value; validate keys, network overlaps,
-gateway addresses, shared-secret formats and compatibility before export.
-Imported scripts/hooks must never execute. Unsupported profile features must
-produce clear errors rather than being silently discarded.
+1. Consolidate installation, limits, evidence and PR description. Preserve failed
+   logs; distinguish actual human observations from API/frontend simulations.
+2. Complete the remaining browser checks with disposable profiles/accounts:
+   file selection, Viewer access, keyboard/narrow-screen layout and clear errors.
+3. Review the exact release source, supported upgrade/recovery instructions,
+   source/image checks and fresh CI. Merge/publish only after unresolved gates pass.
+4. Clean only verified disposable acceptance resources after review ends, retaining
+   operational evidence. Production deployment is a separate planned change.
 
-Initially generate a reviewed configuration package; do not apply changes to a
-running controller. Credentials must not reach third-party services, analytics,
-browser persistent storage or diagnostic logs. Mask secrets in previews.
+## After release
 
-Useful additions: simple/advanced views, a gateway-preparation checklist,
-connectivity checks, clear recovery/rekey status and sanitized support reports.
-A later apply feature needs a private backup, a change preview, a health check
-and timed automatic rollback. Monitoring and applying changes remain separate.
+- Safe structural migrations: add/remove paths or change reserved network resources
+  with explicit ownership reconciliation, failure injection and rollback tests.
+- Broader Linux compatibility: certify exact hosts and Docker/kernel prerequisites.
+- Simpler first-run guidance, clearly explained errors and practical restore drills.
+- Better read-only rekey/diagnostic visibility and tested optional notifications.
 
-## Current follow-up: simpler installation and durable observations
-
-A preview-first installer creates only the optional dashboard and status-mirror
-services, enables startup, and uses loopback access through SSH. It rejects
-conflicting files/deployments and supports repeating the exact installation.
-The separate history mount preserves up to 200 observations for at most 30 days.
-Installation/restarts and encrypted integration must pass on an isolated VPS
-before this follow-up is released. It does not upgrade the VPN controller.
-
-Next work: a reviewed dashboard upgrade procedure; guided prerequisites and
-gateway checks; richer read-only diagnostics. Live apply remains a separate
-feature requiring a change preview, private backup and timed rollback.
+Initial installation already supports1–4 tunnels. Structural live migration,
+arbitrary WireGuard scripts, IPv6/full-tunnel routing and automatic gateway
+configuration are outside this candidate. Do not expand scope before release.
 
 Prepared by **r.abdulkhalek**.
