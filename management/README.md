@@ -11,6 +11,10 @@ The complete product is still under acceptance testing. Live web changes are
 OFF in ordinary installations. Do not replace a working production service yet.
 See [actual evidence and remaining gates](VALIDATION.md).
 
+**Start here:** [plain-language deployment and every dashboard function](USER_GUIDE.md).
+It includes the first installation when no dashboard exists yet, two-profile
+setup, exact startup/opening steps and the saved-draft-to-review workflow.
+
 ## What you need
 
 Use a separate Linux test server with Docker Engine, the Compose plugin, Python 3
@@ -23,9 +27,9 @@ version. Keep private settings outside Git and shared folders.
 
 1. Open the **Profiles** tab. Enter your office subnet and reliable devices that
    answer health checks. Enter the application network used by Docker.
-2. Import your first WireGuard profile and give it a readable name, such as
-   Main office. Import the second and call it Backup office.
-3. Put Main office first. Review every address and warning. Unsupported scripts,
+2. Add WireGuard profile twice and select the first and second client .conf files.
+   The wizard generates path names; the draft itself can have a readable name.
+3. Put the preferred connection first. Review every address and warning. Unsupported scripts,
    arbitrary IPsec files and hooks are refused instead of silently discarded.
 4. Download the private package. This contains keys: keep it secret.
 5. On your separate test Linux server, create a root-owned mode0700 directory,
@@ -85,6 +89,7 @@ cd /opt/vpn-system
 sudo docker compose --project-name vpn-system config
 sudo docker compose --project-name vpn-system build
 sudo docker compose --project-name vpn-system run --rm --no-deps \
+  --volume /root/vpn-settings:/etc/vpn:ro \
   --entrypoint python3 vpn-router /app/doctor.py
 sudo docker compose --project-name vpn-system up -d
 sudo docker compose --project-name vpn-system ps
