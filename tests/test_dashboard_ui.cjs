@@ -16,15 +16,16 @@ async function main(){
   context.show(status);assert.match(get('overall').className,/bad/);assert.match(get('overall').textContent,/probe failing/);
   context.show({...status,available:false,paths:[{...status.paths[0],healthy:true}]});assert.match(get('overall').className,/bad/);assert.equal(get('overall').textContent,'Monitoring unavailable');
   get('addWg').onclick();const card=get('profileList').children[0];const fileInput=card.querySelectorAll('input,textarea').find(e=>e.type==='file');const area=card.querySelectorAll('[data-field]')[0];
-  area.value='old profile';get('review').onclick();assert.equal(get('download').disabled,false);
+  area.value='old profile';get('review').onclick();assert.equal(get('download').disabled,false);assert.match(get('validationStatus').textContent,/✓ Configuration valid/);
   fileInput.files=[{size:16385,text:async()=>{throw Error('Must not read oversized file');}}];await fileInput.onchange();
-  assert.equal(get('download').disabled,true);assert.equal(area.value,'');assert.match(get('preview').textContent,/too large/);
+  assert.equal(get('download').disabled,true);assert.equal(area.value,'');assert.match(get('preview').textContent,/too large/);assert.match(get('validationStatus').textContent,/✕/);
   let finish;const slow={size:100,text:()=>new Promise(resolve=>finish=resolve)};fileInput.files=[slow];const pending=fileInput.onchange();
   fileInput.files=[{size:100,text:async()=>'new profile'}];await fileInput.onchange();finish('old slow profile');await pending;
-  assert.equal(area.value,'new profile');assert.equal(get('download').disabled,true);
+  assert.equal(area.value,'new profile');assert.equal(get('download').disabled,true);assert.match(get('validationStatus').textContent,/Not checked/);
   fileInput.files=[slow];const removed=fileInput.onchange();card.isConnected=false;finish('removed profile');await removed;assert.equal(area.value,'');
   get('clear').onclick();get('addIpsec').onclick();const secret=get('profileList').children[0].querySelectorAll('[data-field]').find(e=>e.dataset.field==='secret');secret.value=' leading and trailing ';get('review').onclick();
   assert.match(get('preview').textContent,/ leading and trailing /);
+  const prepare=context.Profiles.prepare;context.Profiles.prepare=()=>{throw Error('Unsupported WireGuard setting PostUp');};get('review').onclick();assert.equal(get('download').disabled,true);assert.match(get('validationStatus').textContent,/✕/);assert.match(get('preview').textContent,/PostUp/);context.Profiles.prepare=prepare;
   console.log('Dashboard stale/failing status, import invalidation, asynchronous races and secret preservation passed.');
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

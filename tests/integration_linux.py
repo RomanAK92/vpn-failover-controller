@@ -29,10 +29,23 @@ def peer_mode(config):
     run('ip','link','set','peer-ipsec','mtu','1400','up')
     run('ip','route','add',f'10.251.{ident}.2/32','dev','peer-ipsec')
     pathlib.Path('/run/vpn-router').mkdir(exist_ok=True)
+    # This is a dedicated synthetic gateway namespace, not the host VPN runtime.
+    # A disk-bind VICI socket can survive a host reboot; existence is not readiness.
+    socket_path=pathlib.Path('/run/vpn-router/charon.vici')
+    if socket_path.exists():
+        import stat
+        attributes=socket_path.lstat()
+        if not stat.S_ISSOCK(attributes.st_mode) or attributes.st_uid!=0:
+            raise RuntimeError('Unexpected synthetic gateway control object; refusing removal.')
+        socket_path.unlink()
     daemon=sp.Popen(['/usr/lib/ipsec/charon'],stdout=sp.DEVNULL,stderr=sp.DEVNULL)
     for _ in range(100):
-        if pathlib.Path('/run/vpn-router/charon.vici').exists():break
+        check=sp.run(['swanctl','--stats','--uri','unix:///run/vpn-router/charon.vici'],
+            capture_output=True,timeout=3)
+        if check.returncode==0:break
+        if daemon.poll() is not None:raise RuntimeError('Synthetic IPsec daemon exited before readiness.')
         time.sleep(.1)
+    else:raise RuntimeError('Synthetic IPsec daemon did not become ready.')
     run('swanctl','--load-all','--noprompt','--file','/test/swan.conf',
         '--uri','unix:///run/vpn-router/charon.vici')
     from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -57,14 +70,17 @@ def app_mode():
     ThreadingHTTPServer(('0.0.0.0',8080),Handler).serve_forever()
 
 
-def suite(root,keep=False,soak_seconds=0,dashboard=False):
+def suite(root,keep=False,soak_seconds=0,dashboard=False,management=False,persistent=False,upgrade_from=None,reboot_directory=None,review_directory=None,normal_controls=False):
     root=pathlib.Path(root).resolve();sys.path.insert(0,str(root/'build'))
     from configuration import normalize
     tag='vpn-release-'+secrets.token_hex(4)
     image=tag+':test';wan=tag+'-wan';appnet=tag+'-app'
     names={'main':tag+'-main','secondary':tag+'-secondary','vpn':tag+'-vpn','app':tag+'-app'}
-    temp=pathlib.Path(tempfile.mkdtemp(prefix=tag+'-'));os.chmod(temp,0o700)
-    results=[];containers=[];networks=[]
+    if reboot_directory or review_directory:
+        import integration_reboot
+        integration_reboot.private_directory(pathlib.Path(reboot_directory or review_directory))
+    temp=pathlib.Path(tempfile.mkdtemp(prefix=tag+'-',dir=reboot_directory or review_directory));os.chmod(temp,0o700)
+    results=[];containers=[];networks=[];volumes=[];managed=None
     host_default=run('ip','route','show','default')
     def record(name,**detail):
         item={'test':name,'passed':True,**detail};results.append(item)
@@ -181,6 +197,16 @@ secrets {{
         (controller/'peers.json').write_text(json.dumps(public))
         for path in temp.rglob('*'):
             if path.is_file():path.chmod(0o600)
+        if management:
+            import integration_managed
+            managed=integration_managed.prepare(pathlib.Path(upgrade_from).resolve() if upgrade_from else root,
+                temp,controller,tag,run,containers,volumes,persistent=persistent,normal_controls=normal_controls)
+            controller=managed['destination']/'config'
+            runtime=managed['destination']/'data/runtime'
+            config=managed['config']
+            # Build and run the actual guided engine context, not an unrelated image.
+            run('docker','build','-t',image,str(managed['destination']/'engine'),timeout=600)
+            record('guided-package-preparation-and-engine-build',paths=len(config['paths']))
         for name,directory,endpoint in peer_configs:
             run('docker','run','-d','--name',names[name],'--network',wan,'--ip',endpoint,
                 '--cap-add','NET_ADMIN','--cap-add','NET_RAW','--sysctl','net.ipv4.conf.all.rp_filter=0',
@@ -192,8 +218,12 @@ secrets {{
             '--security-opt','no-new-privileges:true','--read-only','--memory','256m','--pids-limit','128','--restart','unless-stopped',
             '--sysctl','net.ipv4.ip_forward=1','--sysctl','net.ipv4.conf.all.rp_filter=0',
             '--tmpfs','/run:rw,nosuid,size=16m','--tmpfs','/tmp:rw,noexec,nosuid,size=16m',
-            '--entrypoint','sh','-v',str(controller)+':/etc/vpn:ro','-v',str(runtime)+':/run/vpn-router',
-            image,'-c','ip route replace default via 172.28.241.1 && iptables -N DOCKER-USER && iptables -A FORWARD -j DOCKER-USER && exec python3 -u /app/supervisor.py')
+            '--entrypoint','sh',*(
+                ['-v',managed['management_mount']+':/management:rw','-v',str(managed['control'])+':/control:rw']
+                if managed else ['-v',str(controller)+':/etc/vpn:ro']),'-v',str(runtime)+':/run/vpn-router',
+            image,'-c','ip route replace default via 172.28.241.1 && iptables -N DOCKER-USER && iptables -A FORWARD -j DOCKER-USER && exec python3 -u '+(
+                '/app/management/manager.py --application-file /management/readiness.json '+('--enable-managed-changes' if managed.get('normal_controls') else '--enable-test-apply')
+                if managed and managed.get('driver') else '/app/supervisor.py'))
         containers.append(names['vpn'])
         run('docker','network','connect','--ip','172.28.240.2',appnet,names['vpn'])
         run('docker','run','-d','--name',names['app'],'--network',appnet,'--ip','172.28.240.10',
@@ -203,6 +233,17 @@ secrets {{
         wait_path('wg-main',timeout=180,all_healthy=True)
         initial_default=dx('vpn','ip','route','show','default')
         record('four-path-startup',active='wg-main')
+        if managed:
+            integration_managed.start(managed,names,temp,containers,run,record)
+        if review_directory:
+            http_from_app('main')
+            import integration_review
+            integration_review.prepare(managed,names,containers,networks,image,temp,
+                pathlib.Path(review_directory),host_default,run,record)
+            keep=True
+            print(json.dumps({'result':'REVIEW-READY','resources_prefix':tag,
+                'automatic_browser_acceptance':False}),flush=True)
+            return
         deadline=time.monotonic()+30
         while time.monotonic()<deadline:
             diagnostic=sp.run(['docker','exec',names['vpn'],'python3','/app/status.py','--json'],capture_output=True,text=True)
@@ -248,14 +289,18 @@ secrets {{
         run('docker','restart',names['vpn'],timeout=40);restarted=time.monotonic()
         wait_path('wg-main',timeout=120,all_healthy=True,since=restarted)
         record('container-restart-restores-four-paths')
+        ready_before=integration_managed.wait_ready(managed,names,run) if managed and managed.get('driver') else 0
         killed=time.monotonic()
         dx('vpn','python3','-c',"import os,pathlib,signal; p=next(p for p in pathlib.Path('/proc').iterdir() if p.name.isdigit() and (p/'comm').read_text().strip()=='charon'); os.kill(int(p.name),signal.SIGKILL)")
         # Wait for an actual Docker recovery, not a retained pre-crash status file.
-        deadline=time.monotonic()+60
-        while time.monotonic()<deadline:
-            if json.loads(run('docker','inspect',names['vpn']))[0]['RestartCount']>0:break
-            time.sleep(1)
-        else:raise RuntimeError('Killed IPsec daemon did not trigger bounded container recovery')
+        if managed and managed.get('driver'):
+            integration_managed.wait_ready(managed,names,run,after=ready_before)
+        else:
+            deadline=time.monotonic()+60
+            while time.monotonic()<deadline:
+                if json.loads(run('docker','inspect',names['vpn']))[0]['RestartCount']>0:break
+                time.sleep(1)
+            else:raise RuntimeError('Killed IPsec daemon did not trigger bounded container recovery')
         wait_path('wg-main',timeout=180,all_healthy=True,since=killed+5)
         record('ipsec-daemon-crash-automatic-recovery')
         def verify_container_default():
@@ -285,6 +330,14 @@ secrets {{
         else:raise RuntimeError('Healthcheck did not become healthy after recovery')
         http_from_app('main')
         record('healthcheck-and-256m-memory-limit')
+        if managed:
+            integration_managed.finish(managed,names,run,record)
+            if upgrade_from:
+                image=integration_managed.upgrade(managed,names,root,temp,wan,appnet,containers,run,record,image)
+                wait_path('wg-main',timeout=180,all_healthy=True)
+                http_from_app('main')
+                record('different-source-upgrade-restores-all-four-tunnels-and-docker-application')
+            integration_managed.transactions(managed,names,run,record,http_from_app)
         if dashboard:
             import integration_dashboard
             integration_dashboard.check(root,tag,names,temp,runtime,dx,run,state,wait_path,block,record,network_snapshot,http_from_app)
@@ -301,6 +354,11 @@ secrets {{
             record('continuous-four-path-observation',seconds=soak_seconds,checks=checks)
         verify_container_default()
         if run('ip','route','show','default')!=host_default:raise RuntimeError('Host default route changed during observation')
+        if reboot_directory:
+            import integration_reboot
+            integration_reboot.prepare(managed,names,containers,networks,volumes,image,temp,
+                pathlib.Path(reboot_directory),host_default,run,record)
+            keep=True  # Only after the durable ownership receipt was written.
         print(json.dumps({'result':'PASS','checks':len(results),'resources_prefix':tag}),flush=True)
     except Exception as e:
         print(json.dumps({'result':'FAIL','error':str(e),'passed_checks':len(results),'resources_prefix':tag}),flush=True)
@@ -313,16 +371,30 @@ secrets {{
         if not keep:
             for name in reversed(containers):sp.run(['docker','rm','-f',name],stdout=sp.DEVNULL,stderr=sp.DEVNULL)
             for name in reversed(networks):sp.run(['docker','network','rm',name],stdout=sp.DEVNULL,stderr=sp.DEVNULL)
+            for name in reversed(volumes):sp.run(['docker','volume','rm',name],stdout=sp.DEVNULL,stderr=sp.DEVNULL)
             sp.run(['docker','image','rm',image],stdout=sp.DEVNULL,stderr=sp.DEVNULL)
+            if managed:
+                sp.run(['docker','image','rm',managed['web_image']],stdout=sp.DEVNULL,stderr=sp.DEVNULL)
+                for extra in ('previous_image','upgrade_image'):
+                    if managed.get(extra):sp.run(['docker','image','rm',managed[extra]],stdout=sp.DEVNULL,stderr=sp.DEVNULL)
             shutil.rmtree(temp)
 
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--root',default=str(pathlib.Path(__file__).resolve().parent.parent))
-    p.add_argument('--peer');p.add_argument('--app',action='store_true');p.add_argument('--keep',action='store_true');p.add_argument('--soak-seconds',type=int,default=0);p.add_argument('--dashboard',action='store_true')
+    p.add_argument('--peer');p.add_argument('--app',action='store_true');p.add_argument('--keep',action='store_true');p.add_argument('--soak-seconds',type=int,default=0);p.add_argument('--dashboard',action='store_true');p.add_argument('--management',action='store_true')
+    p.add_argument('--management-persistent',action='store_true',help='Owned disk-bind installation; never fills its filesystem')
+    p.add_argument('--management-normal-controls',action='store_true',help='Owned acceptance using explicit operator flags instead of test flags')
+    p.add_argument('--upgrade-from',help='Reviewed previous manager source, isolated fixture only; requires persistent mode')
+    p.add_argument('--reboot-directory',help='Private isolated-lab fixture directory; retains verified resources for a separately authorized host reboot')
+    p.add_argument('--review-directory',help='Keep only a newly initialized owned fixture for human browser acceptance; SSH loopback access only')
     a=p.parse_args()
     if a.peer:peer_mode(a.peer)
     elif a.app:app_mode()
     else:
+        if a.management_normal_controls and (not a.management_persistent or a.keep or a.review_directory or a.reboot_directory or a.upgrade_from or a.soak_seconds or a.dashboard):p.error('Operator-mode acceptance requires only fresh persistent mode without retained fixtures.')
         if not 0<=a.soak_seconds<=172800:p.error('soak-seconds must be between 0 and 172800')
-        suite(a.root,a.keep,a.soak_seconds,a.dashboard)
+        if a.upgrade_from and not a.management_persistent:p.error('Upgrade acceptance requires persistent owned storage.')
+        if a.reboot_directory and (not a.management_persistent or a.keep):p.error('Reboot preparation requires persistent mode without --keep.')
+        if a.review_directory and (not a.management_persistent or a.keep or a.reboot_directory or a.upgrade_from or a.soak_seconds or a.dashboard):p.error('Human review requires only persistent mode and its dedicated private directory.')
+        suite(a.root,a.keep,a.soak_seconds,a.dashboard,a.management or a.management_persistent,a.management_persistent,a.upgrade_from,a.reboot_directory,a.review_directory,a.management_normal_controls)

@@ -1,0 +1,311 @@
+import importlib.util
+import json
+import os
+import pathlib
+import sqlite3
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+import urllib.error
+import urllib.request
+
+ROOT = pathlib.Path(__file__).parents[1]
+sys.path.insert(0, str(ROOT/'dashboard'))
+from accounts import Accounts, AuthError, IDLE, LIFETIME, origin_policy, cookie_header
+PASSWORD = 'fixture passphrase for tests only'
+
+
+class AccountTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        if os.name == 'posix':os.chmod(self.temp.name, 0o700)
+        self.now = 1000000
+        self.store = Accounts(self.temp.name, initialize=True, clock=lambda:self.now)
+        self.store.put_user('admin', PASSWORD)
+
+    def tearDown(self):
+        self.store.close()
+        self.temp.cleanup()
+
+    def test_hash_only_storage_and_independent_salts(self):
+        self.store.put_user('viewer', PASSWORD, 'viewer')
+        rows = self.store.db.execute('SELECT salt,hash FROM users').fetchall()
+        self.assertNotEqual(rows[0], rows[1])
+        self.assertNotIn(PASSWORD, pathlib.Path(self.temp.name,'accounts.sqlite3').read_bytes().decode('latin1'))
+
+    def test_sessions_require_csrf_and_viewer_cannot_admin(self):
+        self.store.put_user('viewer', PASSWORD, 'viewer')
+        sid, user = self.store.login('viewer', PASSWORD, '127.0.0.1')
+        self.assertEqual(self.store.session(sid)['role'], 'viewer')
+        with self.assertRaises(AuthError):self.store.session(sid, admin=True)
+        with self.assertRaises(AuthError):self.store.logout(sid, 'wrong')
+        self.store.logout(sid, user['csrf'])
+        with self.assertRaises(AuthError):self.store.session(sid)
+
+    def test_polling_does_not_extend_idle_expiry(self):
+        sid, _ = self.store.login('admin', PASSWORD, '127.0.0.1')
+        for _ in range(3):
+            self.now += IDLE/4
+            self.store.session(sid, touch=False)
+        self.now += IDLE/4
+        with self.assertRaises(AuthError):self.store.session(sid)
+
+    def test_activity_extends_idle_but_not_absolute_lifetime(self):
+        sid, user = self.store.login('admin', PASSWORD, '127.0.0.1')
+        for _ in range(int(LIFETIME/(IDLE/2))-1):
+            self.now += IDLE/2
+            self.store.session(sid, user['csrf'])
+        self.now += IDLE/2
+        with self.assertRaises(AuthError):self.store.session(sid)
+
+    def test_lockout_survives_process_restart_and_ip_change(self):
+        for i in range(5):
+            with self.assertRaises(AuthError) as caught:self.store.login('admin', 'incorrect', '10.0.0.'+str(i+1))
+            self.assertEqual(caught.exception.status, 401)
+        self.store.close();self.store = Accounts(self.temp.name, clock=lambda:self.now)
+        with self.assertRaises(AuthError) as caught:self.store.login('admin', PASSWORD, '10.0.0.10')
+        self.assertEqual(caught.exception.status, 429)
+        self.now += 901
+        self.store.login('admin', PASSWORD, '10.0.0.10')
+
+    def test_reset_invalidates_all_existing_sessions(self):
+        sid, _ = self.store.login('admin', PASSWORD, '127.0.0.1')
+        self.store.put_user('admin', 'a replacement fixture passphrase', replace=True)
+        with self.assertRaises(AuthError):self.store.session(sid)
+        with self.assertRaises(AuthError):self.store.login('admin', PASSWORD, '127.0.0.1')
+        self.store.login('admin', 'a replacement fixture passphrase', '127.0.0.1')
+
+    def test_account_change_requires_admin_csrf_and_reauthentication(self):
+        self.store.put_user('viewer', PASSWORD, 'viewer')
+        sid, user = self.store.login('admin', PASSWORD, '127.0.0.1')
+        viewer, vu = self.store.login('viewer', PASSWORD, '127.0.0.1')
+        with self.assertRaises(AuthError):self.store.change_user(viewer, vu['csrf'], PASSWORD, 'other', PASSWORD, 'viewer')
+        with self.assertRaises(AuthError):self.store.change_user(sid, 'wrong', PASSWORD, 'other', PASSWORD, 'viewer')
+        with self.assertRaises(AuthError):self.store.change_user(sid, user['csrf'], 'wrong', 'other', PASSWORD, 'viewer')
+        self.store.change_user(sid, user['csrf'], PASSWORD, 'other', PASSWORD, 'viewer')
+        self.assertEqual(self.store.list_users(sid)[1]['username'], 'other')
+
+    def test_last_admin_cannot_be_demoted_and_self_reset_revokes_cookie(self):
+        sid, user = self.store.login('admin', PASSWORD, '127.0.0.1')
+        with self.assertRaises(ValueError):self.store.put_user('admin', PASSWORD, 'viewer', replace=True)
+        result=self.store.change_user(sid, user['csrf'], PASSWORD, 'admin', 'new fixture passphrase for reset', 'admin', True)
+        self.assertTrue(result['reauthenticate'])
+        with self.assertRaises(AuthError):self.store.session(sid)
+
+    def test_unknown_schema_is_not_overwritten_by_account_initialization(self):
+        self.store.db.execute('PRAGMA user_version=9');self.store.db.commit()
+        with self.assertRaises(ValueError):Accounts(self.temp.name, initialize=True)
+        self.assertEqual(self.store.db.execute('PRAGMA user_version').fetchone()[0], 9)
+
+    def test_restart_preserves_session_and_logout_revokes_it(self):
+        sid, user = self.store.login('admin', PASSWORD, '127.0.0.1')
+        self.store.close();self.store = Accounts(self.temp.name, clock=lambda:self.now)
+        self.assertEqual(self.store.session(sid)['username'], 'admin')
+        self.store.logout(sid, user['csrf'])
+        with self.assertRaises(AuthError):self.store.session(sid)
+
+    def test_security_events_do_not_contain_secrets(self):
+        sid, _ = self.store.login('admin', PASSWORD, '127.0.0.1')
+        data = json.dumps(self.store.events(sid))
+        self.assertIn('login-success', data)
+        self.assertNotIn(sid, data);self.assertNotIn(PASSWORD, data)
+
+    def test_credentials_and_invalid_origin_rejected(self):
+        for name, password in [('INVALID', PASSWORD), ('admin2', 'short')]:
+            with self.assertRaises(ValueError):self.store.put_user(name, password)
+        for origin in ['http://10.0.0.1:8787', 'https://user:pass@example.org', 'https://example.org/path', 'https://example.org?x=1']:
+            with self.assertRaises(ValueError):origin_policy(origin)
+        self.assertTrue(origin_policy('https://vpn.example.org'))
+        self.assertFalse(origin_policy('http://127.0.0.1:8787'))
+        self.assertIn('Secure', cookie_header('test', True))
+        self.assertIn('HttpOnly', cookie_header('test', True))
+        self.assertIn('SameSite=Strict', cookie_header('test', True))
+
+    def test_disable_enable_and_delete_revoke_sessions_and_preserve_audit(self):
+        self.store.put_user('worker', PASSWORD, 'viewer')
+        sid,admin=self.store.login('admin',PASSWORD,'127.0.0.1')
+        worker,_=self.store.login('worker',PASSWORD,'127.0.0.1')
+        def action(value,confirmation=''):
+            return self.store.account_action(sid,admin['csrf'],PASSWORD,'worker',value,True,confirmation)
+        action('disable')
+        with self.assertRaises(AuthError):self.store.session(worker)
+        with self.assertRaises(AuthError):self.store.login('worker',PASSWORD,'127.0.0.1')
+        self.store.put_user('worker',PASSWORD,'viewer',replace=True)
+        self.assertFalse(next(u for u in self.store.list_users(sid) if u['username']=='worker')['enabled'])
+        action('enable');worker,_=self.store.login('worker',PASSWORD,'127.0.0.1')
+        with self.assertRaises(AuthError):action('delete','wrong')
+        self.assertEqual(self.store.session(worker)['username'],'worker')
+        action('delete','worker')
+        with self.assertRaises(AuthError):self.store.session(worker)
+        with self.assertRaises(AuthError):self.store.login('worker',PASSWORD,'127.0.0.1')
+        self.assertNotIn('worker',[u['username'] for u in self.store.list_users(sid)])
+        events=json.dumps(self.store.events(sid))
+        for name in ('account-disabled','account-enabled','account-deleted'):self.assertIn(name,events)
+        self.assertNotIn(PASSWORD,events)
+
+    def test_lifecycle_requires_admin_csrf_password_explicit_confirmation(self):
+        self.store.put_user('worker',PASSWORD,'viewer')
+        sid,admin=self.store.login('admin',PASSWORD,'127.0.0.1')
+        worker,viewer=self.store.login('worker',PASSWORD,'127.0.0.1')
+        for token,csrf,password,confirmed in [(worker,viewer['csrf'],PASSWORD,True),(sid,'wrong',PASSWORD,True),(sid,admin['csrf'],'wrong',True),(sid,admin['csrf'],PASSWORD,False),(sid,admin['csrf'],PASSWORD,'true')]:
+            with self.assertRaises(AuthError):self.store.account_action(token,csrf,password,'worker','disable',confirmed)
+        self.assertEqual(self.store.session(worker)['username'],'worker')
+
+    def test_last_active_admin_and_self_are_protected_even_with_disabled_admin(self):
+        sid,admin=self.store.login('admin',PASSWORD,'127.0.0.1')
+        self.store.put_user('second',PASSWORD,'admin')
+        self.store.account_action(sid,admin['csrf'],PASSWORD,'second','disable',True)
+        for action in ('disable','delete'):
+            with self.assertRaises(AuthError):self.store.account_action(sid,admin['csrf'],PASSWORD,'admin',action,True,'admin')
+        with self.assertRaises(ValueError):self.store.put_user('admin',PASSWORD,'viewer',replace=True)
+        self.store.account_action(sid,admin['csrf'],PASSWORD,'second','enable',True)
+        with self.assertRaises(AuthError):self.store.account_action(sid,admin['csrf'],PASSWORD,'admin','delete',True,'admin')
+        self.store.session(sid,admin=True)
+
+    def test_version_one_upgrade_preserves_existing_account_and_session(self):
+        sid,_=self.store.login('admin',PASSWORD,'127.0.0.1')
+        self.store.close()
+        path=pathlib.Path(self.temp.name)/'accounts.sqlite3'
+        with sqlite3.connect(path) as db:
+            db.executescript('ALTER TABLE users DROP COLUMN enabled; PRAGMA user_version=1;')
+        db.close()
+        self.store=Accounts(self.temp.name,clock=lambda:self.now)
+        self.assertEqual(self.store.db.execute('PRAGMA user_version').fetchone()[0],2)
+        self.assertEqual(self.store.session(sid)['username'],'admin')
+        self.assertTrue(self.store.list_users(sid)[0]['enabled'])
+
+    def test_revoked_actor_between_password_check_and_change_is_refused(self):
+        self.store.put_user('second',PASSWORD,'admin');self.store.put_user('worker',PASSWORD,'viewer')
+        sid,admin=self.store.login('admin',PASSWORD,'127.0.0.1')
+        original=self.store.reauthenticate
+        def revoke_after_check(*args):
+            current=original(*args)
+            other=Accounts(self.temp.name,clock=lambda:self.now)
+            try:other.put_user('admin',PASSWORD,'viewer',replace=True)
+            finally:other.close()
+            return current
+        self.store.reauthenticate=revoke_after_check
+        with self.assertRaises(AuthError):self.store.account_action(sid,admin['csrf'],PASSWORD,'worker','disable',True)
+        self.assertEqual(self.store.db.execute("SELECT enabled FROM users WHERE name='worker'").fetchone()[0],1)
+
+    def test_missing_or_insecure_storage_cannot_start_anonymous(self):
+        with self.assertRaises(ValueError):Accounts(pathlib.Path(self.temp.name)/'missing')
+        if os.name == 'posix':
+            os.chmod(pathlib.Path(self.temp.name)/'accounts.sqlite3', 0o644)
+            with self.assertRaises(ValueError):Accounts(self.temp.name)
+            os.chmod(pathlib.Path(self.temp.name)/'accounts.sqlite3', 0o600)
+
+
+class AccountHTTPTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory()
+        if os.name == 'posix':os.chmod(cls.temp.name, 0o700)
+        store=Accounts(cls.temp.name, initialize=True)
+        store.put_user('admin', PASSWORD);store.put_user('viewer', PASSWORD, 'viewer');store.close()
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1',0));cls.port=sock.getsockname()[1]
+        cls.origin='http://127.0.0.1:'+str(cls.port)
+        cls.log=open(pathlib.Path(cls.temp.name)/'http-test.log','w')
+        extra = cls.server_args(cls.temp.name) if hasattr(cls, 'server_args') else []
+        cls.process=subprocess.Popen([sys.executable,str(ROOT/'dashboard/server.py'),'--port',str(cls.port),'--auth-dir',cls.temp.name,'--origin',cls.origin,'--telemetry',cls.temp.name]+extra,stdout=cls.log,stderr=cls.log)
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(cls.origin+'/api/auth',timeout=.2).close();break
+            except OSError:time.sleep(.05)
+        else:
+            cls.process.terminate();cls.process.wait();raise RuntimeError('Account HTTP test startup failed')
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.process.terminate();cls.process.wait(timeout=5);cls.log.close();cls.temp.cleanup()
+
+    def request(self,path,data=None,headers=None):
+        defaults={'Content-Type':'application/json','Origin':self.origin,'X-VPN-Request':'1'}
+        defaults.update(headers or {})
+        req=urllib.request.Request(self.origin+path,data=json.dumps(data).encode() if data is not None else None,headers=defaults)
+        try:response=urllib.request.urlopen(req,timeout=5)
+        except urllib.error.HTTPError as exc:response=exc
+        with response:return response.status,response.headers,json.load(response)
+
+    def login(self,name='admin'):
+        status, headers, user=self.request('/api/login',{'username':name,'password':PASSWORD})
+        self.assertEqual(status,200)
+        return headers['Set-Cookie'].split(';')[0],user
+
+    def test_status_requires_session_without_token_bypass(self):
+        self.assertEqual(self.request('/api/status',headers={'Authorization':'Bearer '+('a'*32)})[0],401)
+        cookie,user=self.login()
+        status,_,data=self.request('/api/status',headers={'Cookie':cookie})
+        self.assertEqual(status,200);self.assertFalse(data['available'])
+        self.assertNotIn('csrf',data)
+
+    def test_cross_origin_login_and_host_rebinding_rejected(self):
+        self.assertEqual(self.request('/api/login',{'username':'admin','password':PASSWORD},{'Origin':'https://attacker.example'})[0],403)
+        self.assertEqual(self.request('/api/login',{'username':'admin','password':PASSWORD},{'Host':'attacker.example'})[0],403)
+        self.assertEqual(self.request('/api/login',{'username':'admin','password':PASSWORD},{'X-VPN-Request':''})[0],403)
+
+    def test_logout_requires_csrf_and_invalidates_cookie(self):
+        cookie,user=self.login()
+        self.assertEqual(self.request('/api/logout',{}, {'Cookie':cookie})[0],403)
+        status, headers,_=self.request('/api/logout',{}, {'Cookie':cookie,'X-CSRF-Token':user['csrf']})
+        self.assertEqual(status,200);self.assertIn('Max-Age=0',headers['Set-Cookie'])
+        self.assertEqual(self.request('/api/session',headers={'Cookie':cookie})[0],401)
+
+    def test_viewer_role_and_nonexistent_control_endpoint(self):
+        cookie,_=self.login('viewer')
+        self.assertEqual(self.request('/api/security-events',headers={'Cookie':cookie})[0],403)
+        self.assertEqual(self.request('/api/apply',{}, {'Cookie':cookie})[0],404)
+
+    def test_http_account_management_reauth_and_roles(self):
+        cookie,user=self.login()
+        body={'username':'operator','password':PASSWORD,'role':'viewer','current_password':PASSWORD,'replace':False}
+        self.assertEqual(self.request('/api/accounts',body,{'Cookie':cookie})[0],403)
+        headers={'Cookie':cookie,'X-CSRF-Token':user['csrf']}
+        self.assertEqual(self.request('/api/accounts',dict(body,current_password='incorrect'),headers)[0],401)
+        self.assertEqual(self.request('/api/accounts',body,headers)[0],200)
+        result=self.request('/api/accounts',headers={'Cookie':cookie})
+        self.assertIn({'username':'operator','role':'viewer','enabled':True},result[2]['users'])
+        viewer,v=self.login('operator')
+        self.assertEqual(self.request('/api/accounts',dict(body,username='third'),{'Cookie':viewer,'X-CSRF-Token':v['csrf']})[0],403)
+
+    def test_http_lifecycle_guards_and_revokes_cookie(self):
+        cookie,user=self.login();headers={'Cookie':cookie,'X-CSRF-Token':user['csrf']}
+        self.assertEqual(self.request('/api/accounts',{'username':'lifecycle','password':PASSWORD,'role':'viewer','current_password':PASSWORD},headers)[0],200)
+        target,_=self.login('lifecycle')
+        body={'username':'lifecycle','current_password':PASSWORD,'confirmed':True,'confirmation':'lifecycle'}
+        self.assertEqual(self.request('/api/accounts/disable',body,{'Cookie':cookie})[0],403)
+        self.assertEqual(self.request('/api/accounts/disable',dict(body,current_password='wrong'),headers)[0],401)
+        self.assertEqual(self.request('/api/accounts/disable',body,headers)[0],200)
+        self.assertEqual(self.request('/api/session',headers={'Cookie':target})[0],401)
+        self.assertEqual(self.request('/api/accounts/enable',body,headers)[0],200)
+        self.assertEqual(self.request('/api/accounts/delete',dict(body,confirmation='not-the-target'),headers)[0],400)
+        self.assertEqual(self.request('/api/accounts/delete',body,headers)[0],200)
+        self.assertEqual(self.request('/api/accounts/delete',dict(body,username='admin',confirmation='admin'),headers)[0],400)
+
+    def test_request_size_and_malformed_json_bounded(self):
+        self.assertEqual(self.request('/api/login',{'password':'x'*5000})[0],413)
+        self.assertEqual(self.request('/api/login',[]) [0],400)
+        cookie,_=self.login()
+        status,headers,_=self.request('/api/security-events',headers={'Cookie':cookie})
+        self.assertEqual(status,200);self.assertEqual(headers['Cache-Control'],'no-store')
+
+    def test_support_download_is_administrator_only_and_has_no_session_or_addresses(self):
+        self.assertEqual(self.request('/api/support')[0],401)
+        viewer,_=self.login('viewer')
+        self.assertEqual(self.request('/api/support',headers={'Cookie':viewer})[0],403)
+        cookie,user=self.login()
+        status,headers,data=self.request('/api/support',headers={'Cookie':cookie})
+        self.assertEqual(status,200)
+        self.assertEqual(headers['Content-Disposition'],'attachment; filename="vpn-support.json"')
+        self.assertEqual(headers['Cache-Control'],'no-store')
+        self.assertFalse(data['available'])
+        self.assertNotIn(user['csrf'],json.dumps(data))
+        self.assertNotIn(PASSWORD,json.dumps(data))
+        self.assertNotIn('127.0.0.1',json.dumps(data))
+
+
+if __name__=='__main__':unittest.main()

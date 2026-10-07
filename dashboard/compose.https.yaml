@@ -1,0 +1,24 @@
+# Optional HTTPS ingress. Use with compose.accounts.yaml after preparing real
+# certificates and rendering a private nginx.conf using tls_proxy.py.
+services:
+  vpn-dashboard:
+    command: [python3, server.py, --bind, 127.0.0.1, --port, "8787", --auth-dir, /auth, --origin, "${DASHBOARD_ORIGIN:?Set the exact HTTPS origin}", --history, /history]
+  vpn-dashboard-https:
+    image: "${NGINX_IMAGE:?Set the reviewed immutable nginx-unprivileged image digest}"
+    network_mode: host
+    user: "101:101"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 64m
+    restart: unless-stopped
+    entrypoint: [nginx]
+    command: [-c, /etc/nginx/nginx.conf, -g, "daemon off;"]
+    tmpfs: [/tmp:rw,noexec,nosuid,size=16m,uid=101,gid=101,mode=0700]
+    volumes:
+      - ${HTTPS_CONFIG:?Set an absolute reviewed nginx.conf path}:/etc/nginx/nginx.conf:ro
+      - ${TLS_DIRECTORY:?Set an absolute private certificate directory}:/tls:ro
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: "2"}

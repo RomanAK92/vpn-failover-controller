@@ -3,13 +3,16 @@
 import concurrent.futures as cf,fcntl,ipaddress,json,os,pathlib,re,signal,subprocess as sp,time
 import guard
 from eventlog import write_event
-from selection import select_path
+from selection import select_controlled
+import operations
 from configuration import status_max_age
 CONFIG=pathlib.Path('/etc/vpn/controller.json')
 STATE=pathlib.Path('/run/vpn-router');STATE.mkdir(exist_ok=True)
 lock=open(STATE/'controller.lock','w');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
 cfg,deployment=guard.load();net=ipaddress.ip_network(cfg['subnet'],strict=True)
 paths=cfg['paths'];names=[p['name'] for p in paths]
+generation,config_digest=operations.configuration_identity(CONFIG)
+boot=pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()
 def cmd(args,timeout=4):return sp.run(args,text=True,stdout=sp.PIPE,stderr=sp.PIPE,timeout=timeout)
 def log(**data):write_event(**data)
 def route(active):
@@ -55,10 +58,11 @@ with cf.ThreadPoolExecutor(max_workers=12) as pool:
    log(event='health-change',health=dict(zip(names,health)));previous_health=health[:]
   for i,h in enumerate(health):
    bad[i]=0 if h else bad[i]+1;good[i]=good[i]+1 if h else 0
-  selected=select_path(active,health,bad,good,cfg['failure_rounds'],cfg['recovery_rounds'])
+  policy=operations.read(STATE/'selection.json',names,generation,config_digest,boot,time.monotonic())
+  selected=select_controlled(active,health,bad,good,cfg['failure_rounds'],cfg['recovery_rounds'],names,policy)
   try:
    if selected!=active:
-    reason='all paths unavailable' if selected is None else ('initial path selection' if active is None else ('current path failure threshold reached' if bad[active]>=cfg['failure_rounds'] else 'preferred path recovered for stability threshold'))
+    reason='all paths unavailable' if selected is None else ('operator preference or maintenance' if policy else ('initial path selection' if active is None else ('current path failure threshold reached' if bad[active]>=cfg['failure_rounds'] else 'preferred path recovered for stability threshold')))
     route(selected)
     last_switch={'time':time.time(),'old':None if active is None else names[active],'new':None if selected is None else names[selected],'reason':reason}
     log(event='switch',old=last_switch['old'],new=last_switch['new'],health=health);active=selected
@@ -66,6 +70,7 @@ with cf.ThreadPoolExecutor(max_workers=12) as pool:
    entries=json.loads(cmd(['ip','-j','route','show',str(net)]).stdout)
    if active is not None and not any(e.get('dev')==paths[active]['interface'] and e.get('metric')==50 for e in entries):route(active)
    state={'time':time.time(),'monotonic':time.monotonic(),'active':None if active is None else names[active],'healthy':dict(zip(names,health)),'probes':results,'failure_rounds':bad,'recovery_rounds':good,'last_switch':last_switch,'status_max_age':status_max_age(cfg),'settings':{k:cfg[k] for k in ('interval','quorum','failure_rounds','recovery_rounds')},'paths':[{k:p[k] for k in ('name','kind','interface','source','mtu','mss')} for p in paths]}
+   state['operations']={'mode':'temporary' if policy else 'automatic','preferred':policy['preferred'] if policy else None,'disabled':policy['disabled'] if policy else [],'seconds_remaining':max(0,round(policy['expires']-time.monotonic())) if policy else 0}
    tmp=STATE/'status.tmp';tmp.write_text(json.dumps(state));os.replace(tmp,STATE/'status.json')
   except Exception as e:log(event='error',detail=str(e))
   time.sleep(max(0.1,cfg['interval']-(time.monotonic()-tick)))
