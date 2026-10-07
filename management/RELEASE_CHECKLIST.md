@@ -35,12 +35,12 @@ do not bypass the block or label simulation as a browser pass.
 
 ## Final review and publication
 
-- [ ] Align README, roadmap, transaction limits, current validation and PR body.
+- [x] Align README, roadmap, transaction limits, current validation and PR body.
 - [ ] Review exact source against the published branch, supported host/prerequisites,
   default-off controls, secret handling, dependency versions and cleanup scope.
 - [ ] Verify fresh exact-head CI; code changes need relevant isolated acceptance.
   Documentation-only changes do not require repeating all disruptive tests.
-- [ ] Decide and document exact supported installation/upgrade paths. No universal
+- [x] Decide and document exact supported installation/upgrade paths. No universal
   legacy migration or arbitrary Linux certification; settings backups exclude
   accounts, certificates, application data and logs.
 - [ ] Mark PR ready and merge only after required evidence passes. Publish a new
