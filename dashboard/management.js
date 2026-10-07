@@ -2,9 +2,9 @@
 // IDs and public status only. Passphrases never enter browser storage or the engine.
 (() => {
   const el = id => document.getElementById(id);
-  let status = null, busy = false, previewed = null, pathSignature = null, preparedSignature = null;
+  let status = null, busy = false, previewed = null, pathSignature = null, preparedSignature = null, drafts = [];
   function reset() {
-    status = null; previewed = null;
+    status = null; previewed = null; drafts=[];el('draftNextStep').textContent='';el('continueDraft').hidden=true;el('continueDraft').dataset.draftId='';
     el('managementPassword').value = '';
     el('liveActionPassword').value='';el('operationPassword').value='';
     el('managementStatus').textContent = '';
@@ -15,7 +15,18 @@
     el('archivedGeneration').textContent='';
     el('preferredPath').textContent='';el('maintenancePath').textContent='';pathSignature=null;
   }
+  function draftGuidance() {
+    const draft=drafts.find(d=>d.id===el('managedDraft').value);
+    const count=status?.path_names?.length;
+    const mismatch=!!draft&&!!count&&draft.paths.length!==count;
+    el('prepareGeneration').disabled=busy||!draft||mismatch||!AccountsUI.canControl();
+    el('draftNextStep').className='workflow-help '+(mismatch?'bad':'');
+    el('draftNextStep').textContent=!draft?'Load saved drafts, then choose the configuration you want to review.':mismatch?
+      'This draft has '+draft.paths.length+' tunnel(s); this installation has '+count+'. It is saved safely, but cannot replace this running layout. For a new installation, use Download private configuration in Profiles. Changing this installation’s tunnel count requires a separate migration. Your current VPN stays unchanged.':
+      'Next: enter your administrator passphrase below and click Prepare for review. This creates a version to review; it does not change the running VPN. The next review checks network compatibility before Apply is allowed.';
+  }
   function buttons() {
+    draftGuidance();
     const pending = status?.transaction?.change;
     el('liveStepTitle').textContent=pending?.phase==='pending'?'3. Keep or undo this change':'2. Apply the reviewed settings';
     el('confirmGeneration').hidden=pending?.phase!=='pending';el('revertGeneration').hidden=pending?.phase!=='pending';
@@ -44,7 +55,7 @@
       if(versions!==preparedSignature){
         const previous=el('generationId').value;
         el('preparedGeneration').textContent='';
-        const none=document.createElement('option');none.value='';none.textContent='Choose previously prepared settings';el('preparedGeneration').append(none);
+        const none=document.createElement('option');none.value='';none.textContent='Choose a configuration already prepared for review';el('preparedGeneration').append(none);
         for(const item of prepared){const option=document.createElement('option');option.value=item.id;option.textContent=item.label+(item.id===status.selected_generation?' — currently selected':'');el('preparedGeneration').append(option);}
         el('preparedGeneration').value=prepared.some(item=>item.id===previous)?previous:'';
         el('archivedGeneration').textContent='';
@@ -89,11 +100,22 @@
     finally {if(sensitive)for(const id of ['managementPassword','liveActionPassword','operationPassword'])el(id).value='';busy=false;await refreshStatus();}
   }
   el('loadManagedDrafts').onclick=async()=>{
-    try{const result=await AccountsUI.listDrafts();if(!AccountsUI.canControl())return;el('managedDraft').textContent='';for(const draft of result.drafts){const option=document.createElement('option');option.value=draft.id;option.textContent=draft.label+' ('+draft.paths.length+' roads)';el('managedDraft').append(option);}}
+    try{const result=await AccountsUI.listDrafts();if(!AccountsUI.canControl())return;drafts=result.drafts;el('managedDraft').textContent='';for(const draft of drafts){const option=document.createElement('option');option.value=draft.id;option.textContent=draft.label+' ('+draft.paths.length+' tunnels)';el('managedDraft').append(option);}el('managedDraft').value=drafts[0]?.id||'';draftGuidance();}
     catch(error){el('managementMessage').textContent=error.message;}
   };
+  el('continueDraft').onclick=async()=>{
+    if(!AccountsUI.canControl())return;
+    const id=el('continueDraft').dataset.draftId;
+    await refreshStatus();if(!AccountsUI.canControl())return;
+    await el('loadManagedDrafts').onclick();if(!AccountsUI.canControl())return;
+    if(!drafts.some(d=>d.id===id)){el('draftMessage').textContent='This saved draft is no longer available. Refresh the saved drafts list.';return;}
+    el('managedDraft').value=id;draftGuidance();
+    AccountsUI.setView('manage');el('savedDraftReview').open=true;
+    el('draftNextStep').focus?.();el('draftNextStep').scrollIntoView?.({block:'center',behavior:'smooth'});
+  };
   el('refreshManagementStatus').onclick=refreshStatus;
-  el('prepareGeneration').onclick=()=>action('prepare',{draft:el('managedDraft').value},true);
+  el('managedDraft').onchange=draftGuidance;
+  el('prepareGeneration').onclick=()=>{draftGuidance();if(el('prepareGeneration').disabled)return;return action('prepare',{draft:el('managedDraft').value},true);};
   el('previewGeneration').onclick=()=>action('preview',{generation:el('generationId').value.trim()});
   el('applyGeneration').onclick=()=>action('apply',{generation:el('generationId').value.trim(),timeout:180},true);
   el('confirmGeneration').onclick=()=>action('confirm',{change_id:status?.transaction?.change?.id},true);
