@@ -1,7 +1,7 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const elements=new Map(),calls=[];
-const get=id=>{if(!elements.has(id))elements.set(id,{value:'',disabled:false,textContent:'',append(){}});return elements.get(id);};
+const get=id=>{if(!elements.has(id))elements.set(id,{dataset:{},value:'',disabled:false,textContent:'',append(){}});return elements.get(id);};
 const context={document:{getElementById:get,createElement:()=>({})},prepared:null,AccountsUI:{
   saveDraft:async(files,label)=>{calls.push({files,label});return {id:'fixture',state:'draft',applied:false};},
   listDrafts:async()=>({drafts:[{id:'fixture',state:'draft',applied:false}]}),
@@ -15,6 +15,7 @@ async function main(){
   await get('saveDraft').onclick();assert.equal(calls.length,1);assert.equal(calls[0].files,context.prepared.files);
   assert.equal(calls[0].label,'Office connection');assert.equal(get('saveDraft').disabled,false);
   assert.match(get('draftMessage').textContent,/Active tunnels were not changed/);
+  assert.equal(get('continueDraft').hidden,false);assert.equal(get('continueDraft').dataset.draftId,'fixture');
   assert.doesNotMatch(get('draftList').textContent,/synthetic fixture only/);
   await get('showDrafts').onclick();assert.match(get('draftMessage').textContent,/None has been applied/);
   get('draftArchiveChoice').value='archived:fixture';await get('archiveDraft').onclick();assert.equal(calls.length,1);
