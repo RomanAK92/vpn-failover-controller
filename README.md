@@ -29,6 +29,9 @@ test flags are reserved for disposable acceptance. The
 reboot, upgrade and recovery checks from remaining browser and release checks.
 Start with the [management installation guide](management/README.md); use the
 [release checklist](management/RELEASE_CHECKLIST.md) to assess this candidate.
+For a first-time user, follow [deployment step by step and every dashboard
+function](management/USER_GUIDE.md), including how to prepare settings before
+the first dashboard exists. This candidate is not included in the v0.4.1 release.
 Existing published tags are unchanged.
 
 **v0.3.0:** adds one to four tunnels in any WireGuard/IPsec combination
